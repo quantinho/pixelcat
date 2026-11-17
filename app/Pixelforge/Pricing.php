@@ -5,6 +5,7 @@ namespace App\Pixelforge;
 use App\Enums\Quality;
 use App\Enums\Size;
 use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use InvalidArgumentException;
 
 /**
@@ -24,6 +25,7 @@ final readonly class Pricing
         public array $rates,
         public int $charactersPerTextToken,
         public int $textTokenVariancePercent,
+        public string $textTokenVariance,
         public int $tokensPerReferenceImage,
         private array $outputTokens,
         private array $reasoningTokens,
@@ -45,13 +47,16 @@ final readonly class Pricing
 
         $tokens = $json['tokens'];
 
-        // 0.15 arrives as a JSON number; turn it into whole percent without float maths.
-        $variancePercent = BigDecimal::of((string) $tokens['text_token_variance'])->multipliedBy(100)->toScale(0)->toInt();
+        // 0.15 arrives as a JSON number; keep it exact. The whole-percent view rounds up,
+        // so it is never narrower than Pixelforge's real variance.
+        $variance = BigDecimal::of((string) $tokens['text_token_variance']);
+        $variancePercent = $variance->multipliedBy(100)->toScale(0, RoundingMode::Ceiling)->toInt();
 
         return new self(
             rates: $rates,
             charactersPerTextToken: (int) $tokens['characters_per_text_token'],
             textTokenVariancePercent: $variancePercent,
+            textTokenVariance: (string) $variance,
             tokensPerReferenceImage: (int) $tokens['per_reference_image'],
             outputTokens: $tokens['output'],
             reasoningTokens: $tokens['reasoning'],

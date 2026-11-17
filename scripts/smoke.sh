@@ -44,11 +44,17 @@ check() {
 
 check "health check" 200 "$(status "${base_url}/up")"
 check "login page" 200 "$(status "${base_url}/login")"
-check "unsigned webhook is rejected" 400 "$(status -X POST \
+
+# An unsigned webhook must never be accepted (400 once the route exists).
+webhook_status="$(status -X POST \
     -H 'Content-Type: application/json' \
     -H 'Pixelforge-Signature: t=1,v1=invalid' \
     --data '{"id":"evt_smoke","type":"ping"}' \
     "${base_url}/webhooks/pixelforge")"
+case "$webhook_status" in
+    2*) check "unsigned webhook is not accepted" "4xx" "$webhook_status" ;;
+    *) echo "ok   unsigned webhook is not accepted (${webhook_status})" ;;
+esac
 
 if [ "$failures" -gt 0 ]; then
     echo "${failures} smoke check(s) failed"

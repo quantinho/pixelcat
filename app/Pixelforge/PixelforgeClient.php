@@ -10,6 +10,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 
 /**
  * Thin client for the Pixelforge API. It turns every outcome into one of three things:
@@ -53,14 +54,14 @@ class PixelforgeClient
             ->withHeader('Idempotency-Key', $generation->id)
             ->post('generations', $body));
 
-        return GenerationSnapshot::fromArray($response->json());
+        return $this->snapshot($response);
     }
 
     public function getGeneration(string $pixelforgeId): GenerationSnapshot
     {
         $response = $this->send(fn (PendingRequest $http) => $http->get('generations/'.rawurlencode($pixelforgeId)));
 
-        return GenerationSnapshot::fromArray($response->json());
+        return $this->snapshot($response);
     }
 
     /**
@@ -141,6 +142,21 @@ class PixelforgeClient
         }
 
         throw new PixelforgeUnavailable("Unexpected Pixelforge response: HTTP {$response->status()}.");
+    }
+
+    /**
+     * A success we can't read is an unknown outcome, not an error of ours: for a create,
+     * Pixelforge may still have made (and will bill) the generation.
+     */
+    private function snapshot(Response $response): GenerationSnapshot
+    {
+        $json = $response->json();
+
+        try {
+            return GenerationSnapshot::fromArray(is_array($json) ? $json : []);
+        } catch (InvalidArgumentException $e) {
+            throw new PixelforgeUnavailable("Unreadable Pixelforge response: HTTP {$response->status()}.", previous: $e);
+        }
     }
 
     private function recordLimits(Response $response): void

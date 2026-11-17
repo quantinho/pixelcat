@@ -5,6 +5,8 @@ namespace App\Actions\Pricing;
 use App\Enums\Quality;
 use App\Enums\Size;
 use App\Pixelforge\Pricing;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 
 /**
  * Two parts of a price are only known once a generation finishes: the exact prompt token
@@ -18,10 +20,10 @@ final class EstimatePrice
 
     public function __invoke(string $prompt, Size $size, Quality $quality, int $referenceCount, Pricing $pricing): PriceEstimate
     {
-        $variance = $pricing->textTokenVariancePercent;
+        $variance = BigDecimal::of($pricing->textTokenVariance);
         $text = max(1, intdiv(mb_strlen($prompt) + $pricing->charactersPerTextToken - 1, $pricing->charactersPerTextToken));
-        $textMin = intdiv($text * (100 - $variance), 100);
-        $textMax = intdiv($text * (100 + $variance) + 99, 100);
+        $textMin = BigDecimal::one()->minus($variance)->multipliedBy($text)->toScale(0, RoundingMode::Floor)->toInt();
+        $textMax = BigDecimal::one()->plus($variance)->multipliedBy($text)->toScale(0, RoundingMode::Ceiling)->toInt();
 
         $images = $pricing->tokensPerReferenceImage * $referenceCount;
         $output = $pricing->outputTokens($quality, $size);

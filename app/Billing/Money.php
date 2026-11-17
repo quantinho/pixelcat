@@ -25,10 +25,14 @@ final class Money
             throw new InvalidArgumentException("Not an exact USD amount with at most 9 decimals: [{$usd}].");
         }
 
-        return BigDecimal::of($usd)
-            ->multipliedBy(self::NANOS_PER_DOLLAR)
-            ->toScale(0)
-            ->toInt();
+        try {
+            return BigDecimal::of($usd)
+                ->multipliedBy(self::NANOS_PER_DOLLAR)
+                ->toScale(0)
+                ->toInt();
+        } catch (MathException $e) {
+            throw new InvalidArgumentException("USD amount [{$usd}] is out of range.", previous: $e);
+        }
     }
 
     /**
@@ -52,6 +56,8 @@ final class Money
     /**
      * Price of one token in nanodollars for a rate quoted in USD per 1M tokens,
      * e.g. "12.50" → 12_500. Throws if a single token is not a whole nanodollar.
+     *
+     * Not used for costs: CalculateCost checks wholeness on the total, as the spec says.
      */
     public static function perTokenNanos(string $ratePerMillion): int
     {

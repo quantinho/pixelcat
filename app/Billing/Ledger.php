@@ -16,6 +16,10 @@ use Brick\Math\RoundingMode;
  * (enforced by a partial unique index): a hold of the estimate's maximum when it is
  * submitted, then on success a charge of the user price plus a release of the hold,
  * or on failure only the release.
+ *
+ * settle() and release() check before they insert. Call them while holding the
+ * generation's row lock (as ApplyGenerationSnapshot does); the unique index still
+ * stops a double entry if a caller forgets, but the loser's transaction then fails.
  */
 final class Ledger
 {
