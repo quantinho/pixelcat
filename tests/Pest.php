@@ -27,6 +27,12 @@ pest()->extend(TestCase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Unit');
 
+// Multi-process tests: each file picks its own database trait, because child processes
+// only see committed rows (see tests/Concurrency/).
+pest()->extend(TestCase::class)
+    ->beforeEach(fn () => Http::preventStrayRequests())
+    ->in('Concurrency');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

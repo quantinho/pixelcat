@@ -2,24 +2,21 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * The admin and demo users everywhere; fake generations only outside production
+     * (FR-022). In production, demo generations go through the real API instead
+     * (pixelcat:demo-generations), so every recorded cost matches Pixelforge's records.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(UsersSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        if (! app()->isProduction()) {
+            $this->call(DemoGenerationsSeeder::class);
+        }
     }
 }
