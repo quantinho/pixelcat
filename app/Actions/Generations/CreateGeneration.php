@@ -13,6 +13,8 @@ use App\Jobs\ExpireWaitingGeneration;
 use App\Models\Generation;
 use App\Models\User;
 use App\Pixelforge\PixelforgeClient;
+use App\Pixelforge\PixelforgeRejected;
+use App\Pixelforge\PixelforgeUnavailable;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -26,10 +28,13 @@ use Illuminate\Validation\ValidationException;
  * Checks and the hold run in one transaction holding the user's row lock, so two submissions
  * at the same moment can neither both pass the balance or daily cap check nor create the
  * same id twice. Refusals are ValidationExceptions keyed by the contract's error code
- * (`id_reused`, `prices_changed`, `daily_cap`, `insufficient_balance`).
+ * (`id_reused`, `prices_changed`, `daily_cap`, `insufficient_balance`, and
+ * `pixelforge_unavailable` when current prices can't be fetched).
  */
 final class CreateGeneration
 {
+    public const PIXELFORGE_UNREACHABLE = 'Pixelforge is unreachable right now. Try again in a moment.';
+
     public function __construct(
         private PixelforgeClient $pixelforge,
         private EstimatePrice $estimatePrice,
@@ -53,7 +58,14 @@ final class CreateGeneration
         array $referenceImages,
         string $pricingVersion,
     ): Generation {
-        $pricing = $this->pixelforge->pricing();
+        try {
+            $pricing = $this->pixelforge->pricing();
+        } catch (PixelforgeUnavailable|PixelforgeRejected) {
+            throw ValidationException::withMessages([
+                'pixelforge_unavailable' => self::PIXELFORGE_UNREACHABLE,
+            ])->status(503);
+        }
+
         $estimate = ($this->estimatePrice)($prompt, $size, $quality, count($referenceImages), $pricing);
         $requestHash = self::requestHash($prompt, $size, $quality, $referenceImages);
 

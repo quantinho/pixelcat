@@ -29,7 +29,8 @@ use Illuminate\Support\Facades\Log;
  *   stays `submitting` and is resent with the same Idempotency-Key until a definite answer.
  *
  * Before Pixelforge has the generation this job may change its status itself, always under
- * the row lock. A generation with an ambiguous attempt is never failed here.
+ * the row lock. A generation with an unresolved ambiguous attempt is never failed here; a
+ * later definite answer that proves nothing was created resolves it (RESOLVES_AMBIGUITY).
  */
 class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
 {
@@ -43,6 +44,19 @@ class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
     /** The longest delay SQS accepts. */
     private const MAX_DELAY_SECONDS = 15 * 60;
 
+    /**
+     * Answers that prove an earlier ambiguous attempt created nothing (spec glossary): limits
+     * are applied after Pixelforge's idempotent replay, and content and validation checks
+     * give the same answer for the same parameters. Rate limits, overloads, a bad API key and
+     * a reused key prove nothing, so they leave the attempt ambiguous.
+     */
+    private const RESOLVES_AMBIGUITY = [
+        'concurrency_limit_exceeded',
+        'daily_limit_exceeded',
+        'content_policy_violation',
+        'validation_failed',
+    ];
+
     /** Retries are counted and capped by this job itself (see release()). */
     public int $tries = 0;
 
@@ -51,8 +65,16 @@ class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
 
     public int $backoff = 30;
 
-    /** Long enough for every retry; if a worker dies, the hourly sweep may queue it again. */
-    public int $uniqueFor = 60 * 60;
+    /**
+     * Ambiguous attempts are retried until Pixelforge answers, so the lock must outlive a
+     * long outage, or the hourly sweep would queue a second job beside the retrying one.
+     * The worker releases the lock when the job finishes or fails, and a crashed worker's
+     * job comes back from the queue still holding it. Only a job that vanished from the
+     * queue leaves a stale lock; after a day it lapses and the sweep requeues the
+     * generation. Even a duplicate job would be harmless: it sends the same
+     * Idempotency-Key and applies the result through ApplyGenerationSnapshot.
+     */
+    public int $uniqueFor = 24 * 60 * 60;
 
     public bool $deleteWhenMissingModels = true;
 
@@ -145,6 +167,8 @@ class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
+            // Nothing exists at Pixelforge, so it may expire like any waiting generation.
+            $locked->had_ambiguous_attempt = false;
             $locked->status = GenerationStatus::Waiting;
             $locked->available_at = now()->addSeconds($retryAfter);
             $locked->save();
@@ -163,10 +187,12 @@ class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
             'http_status' => $e->httpStatus,
         ];
 
-        // Pixelforge may hold (and bill) an earlier attempt; failing it here could leave an
-        // image we never charge for. It stays submitting; the hourly sweep resends it with
+        $resolvesAmbiguity = in_array($e->errorCode, self::RESOLVES_AMBIGUITY, true);
+
+        // Pixelforge may still hold (and bill) an earlier attempt; failing it here could leave
+        // an image we never charge for. It stays submitting; the hourly sweep resends it with
         // the same key and an operator looks at the log.
-        if ($generation->had_ambiguous_attempt) {
+        if ($generation->had_ambiguous_attempt && ! $resolvesAmbiguity) {
             Log::critical('Pixelforge rejected a generation that had an ambiguous attempt; leaving it submitting.', $context);
             $generation->recordEvent('retrying', 'Still checking with Pixelforge…', ['error_code' => $e->errorCode]);
 
@@ -179,8 +205,12 @@ class SubmitGenerationToPixelforge implements ShouldBeUnique, ShouldQueue
             default => Log::info('Pixelforge rejected a generation.', $context),
         };
 
-        $failed = DB::transaction(function () use ($generation, $e, $ledger) {
+        $failed = DB::transaction(function () use ($generation, $e, $ledger, $resolvesAmbiguity) {
             $locked = Generation::query()->whereKey($generation->id)->lockForUpdate()->firstOrFail();
+
+            if ($resolvesAmbiguity) {
+                $locked->had_ambiguous_attempt = false;
+            }
 
             // Only this job sets had_ambiguous_attempt, but check under the lock anyway.
             if ($locked->status !== GenerationStatus::Submitting || $locked->had_ambiguous_attempt) {

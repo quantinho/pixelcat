@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Generations\CreateGeneration;
 use App\Actions\Pricing\EstimatePrice;
 use App\Billing\Ledger;
 use App\Billing\Money;
@@ -9,6 +10,8 @@ use App\Http\Requests\GenerationRequest;
 use App\Http\Resources\MoneyResource;
 use App\Models\User;
 use App\Pixelforge\PixelforgeClient;
+use App\Pixelforge\PixelforgeRejected;
+use App\Pixelforge\PixelforgeUnavailable;
 use App\Pixelforge\Pricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -21,7 +24,12 @@ class EstimateController extends Controller
 {
     public function __invoke(GenerationRequest $request, PixelforgeClient $pixelforge, EstimatePrice $estimatePrice, Ledger $ledger): JsonResponse
     {
-        $pricing = $pixelforge->pricing();
+        try {
+            $pricing = $pixelforge->pricing();
+        } catch (PixelforgeUnavailable|PixelforgeRejected) {
+            return response()->json(['message' => CreateGeneration::PIXELFORGE_UNREACHABLE], 503);
+        }
+
         $estimate = $estimatePrice(
             $request->prompt(),
             $request->size(),
