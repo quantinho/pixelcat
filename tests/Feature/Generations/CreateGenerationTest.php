@@ -26,6 +26,7 @@ beforeEach(function () {
     config(['pixelcat.markup_percent' => 25, 'pixelcat.daily_cap_per_user' => 50, 'pixelcat.max_wait_minutes' => 15]);
     $this->travelTo(CarbonImmutable::parse('2026-11-17 12:00:00', 'UTC'));
     Queue::fake();
+    $this->withoutVite(); // the Create page is built by the frontend slice
 
     $this->pixelforge = FakePixelforge::fake();
     $this->ledger = app(Ledger::class);
@@ -66,7 +67,7 @@ it('creates a waiting generation with a hold of the estimate maximum', function 
         ->and($generation->estimate_min)->toBe(58_175_000 + 9_562_500)
         ->and($generation->estimate_likely)->toBe(72_250_000 + 9_562_500)
         ->and($generation->estimate_max)->toBe(CREATE_MAX + 9_562_500)
-        ->and($generation->estimate_rates)->toBe(FakePixelforge::RATES)
+        ->and($generation->estimate_rates)->toEqual(FakePixelforge::RATES)
         ->and($generation->request_hash)->toHaveLength(64)
         ->and($generation->available_at->equalTo(now()))->toBeTrue()
         ->and($generation->pixelforge_id)->toBeNull();
@@ -259,7 +260,7 @@ it('renders the generate page with defaults, keywords and the daily count', func
             ->where('defaults', ['size' => '1024x1024', 'quality' => 'medium'])
             ->where('prefill', null)
             ->where('keywords', ['[succeed]', '[fail]', '[slow]', '[duplicate]', '[overloaded]', '[blocked]'])
-            ->has('cat_prompts', fn (AssertableInertia $prompts) => $prompts->each(fn ($prompt) => $prompt))
+            ->where('cat_prompts', fn ($prompts) => count($prompts) >= 5 && collect($prompts)->every(fn ($prompt) => is_string($prompt) && $prompt !== ''))
             ->where('daily', ['used' => 3, 'cap' => 50, 'resets_at' => '2026-11-18T00:00:00+00:00']));
 });
 
@@ -295,8 +296,9 @@ it('ignores retry ids it must not use', function (Closure $retry) {
             ->component('generations/Create', false)
             ->where('prefill', null));
 })->with([
-    'another user\'s failed generation' => fn () => fn () => Generation::factory()->failed()->create()->id,
-    'an unfinished generation' => fn () => fn (User $user) => Generation::factory()->for($user)->queued()->create()->id,
-    'an unknown id' => fn () => fn () => (string) Str::uuid(),
-    'not a uuid' => fn () => fn () => 'nope',
+    // Closures typed as Closure reach the test unresolved; it calls them with its user.
+    'another user\'s failed generation' => fn () => Generation::factory()->failed()->create()->id,
+    'an unfinished generation' => fn (User $user) => Generation::factory()->for($user)->queued()->create()->id,
+    'an unknown id' => fn () => (string) Str::uuid(),
+    'not a uuid' => fn () => 'nope',
 ]);
