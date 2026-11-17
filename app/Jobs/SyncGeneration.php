@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * The polling fallback for one generation (spec FR-011): a delayed check that fetches the
@@ -158,6 +159,13 @@ class SyncGeneration implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 : Log::warning('Pixelforge refused a sync request; trying later.', $context);
         } catch (PixelforgeUnavailable $e) {
             Log::warning('Pixelforge did not answer a sync request; trying later.', [
+                'generation_id' => $generation->id,
+                'error' => $e->getMessage(),
+            ]);
+        } catch (Throwable $e) {
+            // A snapshot we can't apply needs a human; the chain keeps going so a fix applies.
+            report($e);
+            Log::critical('Could not apply a synced Pixelforge snapshot; trying later.', [
                 'generation_id' => $generation->id,
                 'error' => $e->getMessage(),
             ]);

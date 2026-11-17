@@ -204,6 +204,15 @@ describe('success', function () {
             ->and(collect(ledgerOf($generation))->where('type', 'hold_release'))->toHaveCount(1)
             ->and($this->ledger->balance($this->user))->toBe($this->startingBalance - FakePixelforge::WORKED_EXAMPLE_USER_PRICE);
     })->with(['webhook', 'poll', 'replay']);
+
+    it('dates a finished generation now when Pixelforge sends no completion time', function (string $status) {
+        $generation = heldGeneration($this->user, 'processing');
+
+        ($this->apply)($generation, snapshotFor($generation, $status, ['completed_at' => null]), 'webhook');
+
+        // Without a date it would drop out of the operator report and reconciliation.
+        expect($generation->fresh()->completed_at?->equalTo(now()))->toBeTrue();
+    })->with(['succeeded', 'failed']);
 });
 
 describe('failure', function () {
