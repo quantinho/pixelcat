@@ -107,9 +107,9 @@ complete with known usage, assert provider cost and user price to the nanodollar
 - [ ] T046 [US1] Implement `SubmitGenerationToPixelforge` happy path and definite rejections (400, 401, 409, 422, daily 429 → failed and released) in app/Jobs/SubmitGenerationToPixelforge.php
 - [ ] T047 [US1] Fill in `pixelforge:dispatch` (the hourly sweep's dispatch and expiry part) in app/Console/Commands/DispatchGenerations.php
 - [ ] T048 [US1] Implement `PixelforgeWebhookController` (signature first, delivery recorded outside the transaction with `WebhookDelivery.payload` left null when rejected, dedupe insert and `ApplyGenerationSnapshot` in one transaction, outcomes per contracts/http.md) and its route in app/Http/Controllers/PixelforgeWebhookController.php and routes/webhooks.php
-- [ ] T049 [P] [US1] Implement `useEstimate` (debounced `POST /generations/estimate`, cancels stale requests) in resources/js/composables/useEstimate.ts
-- [ ] T050 [P] [US1] Implement `EstimatePanel` (range, likely, breakdown, rates age, "Failed images are free") in resources/js/components/pixelcat/EstimatePanel.vue
-- [ ] T051 [US1] Implement the Create page (form, size and quality pickers, reference URLs, keyword chips, "Surprise me with a cat", Cmd/Ctrl+Enter, form-generated UUID renewed after success and on `id_reused`, handling of `prices_changed`, `insufficient_balance` and `daily_cap`) in resources/js/pages/generations/Create.vue
+- [x] T049 [P] [US1] Implement `useEstimate` (debounced `POST /generations/estimate`, cancels stale requests) in resources/js/composables/useEstimate.ts
+- [x] T050 [P] [US1] Implement `EstimatePanel` (range, likely, breakdown, rates age, "Failed images are free") in resources/js/components/pixelcat/EstimatePanel.vue
+- [x] T051 [US1] Implement the Create page (form, size and quality pickers, reference URLs, keyword chips, "Surprise me with a cat", Cmd/Ctrl+Enter, form-generated UUID renewed after success and on `id_reused`, handling of `prices_changed`, `insufficient_balance` and `daily_cap`) in resources/js/pages/generations/Create.vue
 
 **Checkpoint**: A user can generate and be charged correctly (history view comes with US3).
 
@@ -149,17 +149,17 @@ webhooks, times out after creating, answers 429/503; assert states and charges.
 
 ### Tests for User Story 3
 
-- [ ] T061 [P] [US3] Feature test for the history page (props per contracts/pages.md, newest first, cursor pagination, `has_unfinished`, only own generations) in tests/Feature/Generations/HistoryPageTest.php
+- [x] T061 [P] [US3] Feature test for the history page (props per contracts/pages.md, newest first, cursor pagination, `has_unfinished`, only own generations) in tests/Feature/Generations/HistoryPageTest.php
 - [ ] T062 [P] [US3] Feature tests for `StoreGenerationImage` (stores once, retries, skips when stored) and `GET /generations/{id}/image` (owner only, signed redirect, Pixelforge URL fallback, 404 when expired) in tests/Feature/Generations/GenerationImageTest.php
 
 ### Implementation for User Story 3
 
 - [ ] T063 [US3] Implement `StoreGenerationImage` and a `GenerationSucceeded` listener that dispatches it in app/Jobs/StoreGenerationImage.php and app/Listeners/StoreImageOnSuccess.php
 - [ ] T064 [US3] Implement `GenerationImageController` and its route in app/Http/Controllers/GenerationImageController.php and routes/images.php
-- [ ] T065 [US3] Implement `GenerationHistoryController@index` and its route in app/Http/Controllers/GenerationHistoryController.php and routes/generations.php
-- [ ] T066 [P] [US3] Implement `StatusBadge`, `Timeline`, `GenerationCard` (image, prices, estimate position bar, error with "You weren't charged", "Try again" link) in resources/js/components/pixelcat/
-- [ ] T067 [P] [US3] Implement `BusyNotice` and `CatMascot` (empty state, failure state; never next to prices) in resources/js/components/pixelcat/
-- [ ] T068 [US3] Implement the history page with `usePoll(3000)` active only while `has_unfinished`, reloading only the props listed in contracts/pages.md, in resources/js/pages/generations/Index.vue
+- [x] T065 [US3] Implement `GenerationHistoryController@index` and its route in app/Http/Controllers/GenerationHistoryController.php and routes/generations.php
+- [x] T066 [P] [US3] Implement `StatusBadge`, `Timeline`, `GenerationCard` (image, prices, estimate position bar, error with "You weren't charged", "Try again" link) in resources/js/components/pixelcat/
+- [x] T067 [P] [US3] Implement `BusyNotice` and `CatMascot` (empty state, failure state; never next to prices) in resources/js/components/pixelcat/
+- [x] T068 [US3] Implement the history page with `usePoll(3000)` active only while `has_unfinished`, reloading only the props listed in contracts/pages.md, in resources/js/pages/generations/Index.vue
 
 **Checkpoint**: The full required part of the assessment works.
 
