@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { Link, usePage } from '@inertiajs/vue3';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
+import MoneyText from '@/components/pixelcat/MoneyText.vue';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { index as credits } from '@/routes/credits';
 import type { BreadcrumbItem } from '@/types';
 
 withDefaults(
@@ -11,6 +14,8 @@ withDefaults(
         breadcrumbs: () => [],
     },
 );
+
+const page = usePage();
 </script>
 
 <template>
@@ -22,6 +27,24 @@ withDefaults(
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
             </template>
+        </div>
+        <div
+            v-if="page.props.balance"
+            class="ml-auto flex items-center gap-3 text-sm"
+        >
+            <span>
+                <span class="text-muted-foreground">Balance</span>
+                <MoneyText
+                    class="ml-1 font-medium"
+                    :money="page.props.balance"
+                />
+            </span>
+            <Link
+                :href="credits()"
+                class="font-medium underline underline-offset-4"
+            >
+                Buy credits
+            </Link>
         </div>
     </header>
 </template>
