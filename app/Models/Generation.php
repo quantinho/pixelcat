@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\GenerationStatus;
 use App\Enums\Quality;
 use App\Enums\Size;
+use App\Pixelforge\GenerationSnapshot;
 use Carbon\CarbonInterface;
 use Database\Factories\GenerationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * One image request. Money columns are int nanodollars.
@@ -136,6 +139,35 @@ class Generation extends Model
             'output_tokens' => $this->output_tokens,
             'reasoning_tokens' => (int) $this->reasoning_tokens,
         ];
+    }
+
+    /**
+     * The generation a Pixelforge snapshot is about, for webhooks and replays. Our id travels
+     * as metadata.local_id, so an event can be matched before the create request returned;
+     * it is trusted only when it agrees with the Pixelforge id we already have, so one
+     * generation's usage can never be charged to another. The Pixelforge id covers the rest.
+     */
+    public static function forSnapshot(GenerationSnapshot $snapshot, bool $lock = false): ?self
+    {
+        $query = fn () => $lock ? self::query()->lockForUpdate() : self::query();
+
+        if ($snapshot->localId !== null && Str::isUuid($snapshot->localId)) {
+            $generation = $query()->whereKey($snapshot->localId)->first();
+
+            if ($generation !== null && ($generation->pixelforge_id === null || $generation->pixelforge_id === $snapshot->id)) {
+                return $generation;
+            }
+
+            if ($generation !== null) {
+                Log::critical('A Pixelforge event names a local generation that has a different Pixelforge id.', [
+                    'generation_id' => $generation->id,
+                    'our_pixelforge_id' => $generation->pixelforge_id,
+                    'event_pixelforge_id' => $snapshot->id,
+                ]);
+            }
+        }
+
+        return $query()->where('pixelforge_id', $snapshot->id)->first();
     }
 
     /**

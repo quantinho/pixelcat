@@ -162,8 +162,7 @@ return [
 
     'features' => [
         Features::registration(),
-        Features::resetPasswords(),
-        Features::emailVerification(),
+        // No password reset or email verification: there is no mail service (DECISIONS.md 13).
         Features::twoFactorAuthentication([
             'confirm' => true,
             'confirmPassword' => true,

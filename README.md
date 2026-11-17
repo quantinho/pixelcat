@@ -16,7 +16,9 @@ Laravel 13, Inertia 3, Vue 3 + TypeScript, Tailwind 4, Postgres, Pest. Hosted on
 ## What it does
 
 - **Estimate before you pay.** The form shows a price range for the prompt, size and quality,
-  from the current Pixelforge pricing. The final price always lands inside the range.
+  from the current Pixelforge pricing. At those rates the final price lands inside the range; if
+  Pixelforge raises them while an image waits for a slot, the user still pays the real price
+  (see DECISIONS.md).
 - **Charge what Pixelforge charged, plus 25%.** The price is computed from the real token counts
   in the result, never from the estimate. Failed and blocked images are free.
 - **Live history.** Each image moves through `waiting → submitting → queued → processing →
@@ -83,7 +85,7 @@ flowchart TD
 - The 25% markup rounds **up** once, in `CalculateCost`; nothing else rounds.
 - The ledger is append-only and the database enforces it: a trigger refuses updates, check
   constraints fix the sign of each entry type, and a generation has at most one hold, release
-  and charge. Entries are deleted only with their user's account.
+  and charge. Deleting an account anonymises it and keeps its entries.
 - Daily reconciliation (`pixelforge:reconcile`, 00:15 UTC) compares recorded provider cost with
   `GET /v1/usage` per day; the admin report shows `match` or the difference. To check the day in
   progress (for example right after a deploy), `php artisan pixelforge:reconcile --today` also

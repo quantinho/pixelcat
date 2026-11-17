@@ -158,6 +158,17 @@ class ProfileUpdateTest extends TestCase
         $this->assertFalse($user->fresh()->is_admin);
     }
 
+    public function test_deleting_an_account_leaves_unfinished_generations_as_they_were_sent()
+    {
+        $user = User::factory()->create();
+        $running = Generation::factory()->for($user)->processing()->create(['prompt' => 'Still drawing']);
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'password']);
+
+        // A resend under the same Idempotency-Key must carry the same prompt.
+        $this->assertSame('Still drawing', $running->fresh()->prompt);
+    }
+
     public function test_correct_password_must_be_provided_to_delete_account()
     {
         $user = User::factory()->create();

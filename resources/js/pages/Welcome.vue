@@ -15,7 +15,7 @@ const features = [
     {
         icon: Receipt,
         title: 'The price before you press Generate',
-        text: "A range from Pixelforge's current rates, updated as you type. The final price always lands inside it.",
+        text: "A range from Pixelforge's current rates, updated as you type. At those rates, the final price lands inside it.",
     },
     {
         icon: ShieldCheck,

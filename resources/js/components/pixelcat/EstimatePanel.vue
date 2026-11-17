@@ -153,7 +153,11 @@ const ratesAge = computed(() => {
                 </tbody>
             </table>
             <p class="mt-2 text-xs text-muted-foreground">
-                Your price is Pixelforge's cost plus 25%.
+                Your price is Pixelforge's cost plus
+                {{ estimate.markup_percent }}%, rounded up to the next billionth
+                of a dollar: {{ estimate.min.display }}–{{
+                    estimate.max.display
+                }}.
                 <template v-if="ratesAge">{{ ratesAge }}.</template>
             </p>
         </details>

@@ -34,15 +34,17 @@ class ReconcileUsage extends Command
     {
         $days = (int) $this->option('days');
 
-        if ($days < 1 || $days > self::MAX_DAYS) {
-            $this->error('--days must be between 1 and '.self::MAX_DAYS.'.');
+        $withToday = (bool) $this->option('today');
+        $maxDays = $withToday ? self::MAX_DAYS - 1 : self::MAX_DAYS;
+
+        if ($days < 1 || $days > $maxDays) {
+            $this->error("--days must be between 1 and {$maxDays}".($withToday ? ' with --today' : '').'.');
 
             return self::FAILURE;
         }
 
         $today = CarbonImmutable::now('UTC')->startOfDay();
         $from = $today->subDays($days);
-        $withToday = (bool) $this->option('today');
         $to = $withToday ? $today : $today->subDay();
         $until = $to->addDay();
 
