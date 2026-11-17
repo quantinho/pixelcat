@@ -86,7 +86,17 @@ jobs:
       - name: Tests (Postgres)
         run: php artisan test
 
-  # Server-side guards that don't depend on anyone's local setup.
+      # Blocking on pull requests; report-only on main, so a fresh advisory or a registry
+      # outage can't block an urgent deploy of code that already passed on its PR.
+      - name: PHP dependency audit
+        continue-on-error: ${{ github.event_name == 'push' }}
+        run: composer audit --locked
+
+      - name: npm dependency audit (production, high and above)
+        continue-on-error: ${{ github.event_name == 'push' }}
+        run: npm audit --omit=dev --audit-level=high
+
+  # Server-side secret scan that doesn't depend on anyone's local hook.
   security:
     runs-on: ubuntu-latest
 
@@ -100,18 +110,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
-        with:
-          php-version: '8.5'
-          tools: composer:v2
-          coverage: none
-
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-
       - name: Secret scan (gitleaks, whole history)
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
@@ -120,12 +118,6 @@ jobs:
           curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${archive}\$" | sha256sum --check -
           tar -xzf "${archive}" gitleaks
           ./gitleaks git --redact --no-banner --config .gitleaks.toml .
-
-      - name: PHP dependency audit
-        run: composer audit --locked
-
-      - name: npm dependency audit (production, high and above)
-        run: npm audit --omit=dev --audit-level=high
 
   deploy:
     needs: [checks, security]

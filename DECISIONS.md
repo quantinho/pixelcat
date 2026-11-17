@@ -30,7 +30,7 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 
 - **Decision:** before submitting, users see a minimum, a most likely price and a maximum. The
   prompt token range is rounded outwards from the docs' ±15%, and reasoning tokens span the
-  quality's documented range. With balances on, we hold the maximum and settle to the actual
+  quality's documented range. Every submission holds the maximum and settles to the actual
   price when the generation finishes.
 - **Why:** two parts of the price are only known afterwards. A range is honest; holding the
   maximum means a user can't overspend.
@@ -62,8 +62,9 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 
 ### 7. Unknown outcomes are never treated as failures
 
-- **Decision:** a generation is marked failed locally only after an answer that, per the docs,
-  means nothing was created (400, 401, 409, 422, 429, 503). After a timeout or an unexpected
+- **Decision:** a generation is marked failed locally only after a rejection we don't retry
+  and that, per the docs, means nothing was created: a rejected prompt, Pixelforge's daily
+  limit, or busy errors (429, 503) that outlast our retries. After a timeout or an unexpected
   response we keep resending with the same key until Pixelforge answers clearly.
 - **Why:** if Pixelforge created the generation and we gave up, it would bill us for an image
   we never charged for.
