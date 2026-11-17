@@ -115,6 +115,10 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 
 - **Why:** reviewers can try it immediately. There is no mail service, so verification would
   lock everyone out; per-user caps protect the shared Pixelforge quota.
+- **Limits that keep free money from becoming abuse:** 5 sign-ups per IP address per hour,
+  and at most $100 of demo credits per user per UTC day.
+- **The shared demo login can't be locked:** its email, password, 2FA, passkeys and deletion
+  are refused, so one reviewer can't lock the others out. Everything else works.
 
 ### 14. Billing days follow Pixelforge's `completed_at`, in UTC
 
@@ -132,22 +136,37 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 - **Decision:** the history page refreshes every 3 seconds while something is unfinished.
 - **Why:** it's enough for a 5–30 second process and has no extra moving parts.
 
+### 17. Deleting an account anonymises it
+
+- **Decision:** name, email, password, prompts and stored images are removed; generations and
+  ledger entries stay, attached to an account nobody can sign in to.
+- **Why:** the ledger is append-only, Pixelforge has already billed those generations, and
+  reconciliation reruns past days. Deleting the rows would turn matching days into mismatches
+  and take revenue out of the operator report.
+
+### 18. A snapshot we can't apply never blocks the others
+
+- **Decision:** the hourly poll and the per-generation sync log a snapshot they can't apply
+  (missing usage, a cost that isn't whole nanodollars) as critical, move that generation to the
+  back of the line, and carry on.
+- **Why:** one malformed answer must not stop every other generation from finishing.
+
 ## Engineering
 
-### 17. A fake Pixelforge for tests and local development
+### 19. A fake Pixelforge for tests and local development
 
 - **Decision:** a fake built from the API docs drives every failure on demand: duplicates,
   reordering, timeouts after creating, 429s and 503s. No test calls the real API.
 - **Why:** the rare cases are the ones that lose money, and they can't be produced reliably
   against the real service.
 
-### 18. Postgres everywhere, tests included
+### 20. Postgres everywhere, tests included
 
 - **Why:** the guarantees above (unique and partial indexes, row locks, `SKIP LOCKED`, the
   trigger) are Postgres behaviour, so the tests run against Postgres, including tests with two
   real processes racing for the same event.
 
-### 19. Hosting on Laravel Cloud
+### 21. Hosting on Laravel Cloud
 
 - **Why:** a managed queue, scheduler, Postgres and object storage with no infrastructure code,
   scaling to zero when idle. Every merge to `main` deploys only after CI passes.

@@ -15,13 +15,15 @@ use Illuminate\Support\Facades\Log;
 /**
  * Compares our provider cost per UTC completion day with GET /v1/usage (FR-020, SC-004).
  *
- * Only completed days are checked: today is still in progress. Our side is every
+ * Only completed days are stored: today is still in progress. `--today` also shows today
+ * so far, without storing it, to check a deployment right after it generated. Our side is every
  * generation Pixelforge billed (it has a provider cost), anomalies included, on the UTC
  * day of its Pixelforge completed_at.
  */
 class ReconcileUsage extends Command
 {
-    protected $signature = 'pixelforge:reconcile {--days=7 : Completed UTC days to check}';
+    protected $signature = 'pixelforge:reconcile {--days=7 : Completed UTC days to check}
+        {--today : Also show today so far (not stored; it changes until the day ends)}';
 
     protected $description = 'Compare provider costs with Pixelforge usage per UTC day';
 
@@ -40,7 +42,9 @@ class ReconcileUsage extends Command
 
         $today = CarbonImmutable::now('UTC')->startOfDay();
         $from = $today->subDays($days);
-        $to = $today->subDay();
+        $withToday = (bool) $this->option('today');
+        $to = $withToday ? $today : $today->subDay();
+        $until = $to->addDay();
 
         try {
             $theirs = $pixelforge->usage($from, $to);
@@ -51,11 +55,11 @@ class ReconcileUsage extends Command
             return self::FAILURE;
         }
 
-        $ours = $this->ourUsage($from, $today);
+        $ours = $this->ourUsage($from, $until);
         $checkedAt = now();
         $rows = [];
 
-        for ($day = $from; $day->lessThan($today); $day = $day->addDay()) {
+        for ($day = $from; $day->lessThan($until); $day = $day->addDay()) {
             $date = $day->toDateString();
             $ourCost = $ours[$date]['cost'] ?? 0;
             $ourCount = $ours[$date]['generations'] ?? 0;
@@ -74,12 +78,12 @@ class ReconcileUsage extends Command
         }
 
         Reconciliation::query()->upsert(
-            $rows,
+            array_values(array_filter($rows, fn (array $row) => $row['date'] !== $today->toDateString())),
             ['date'],
             ['our_cost', 'our_count', 'pixelforge_cost', 'pixelforge_count', 'difference', 'checked_at'],
         );
 
-        $this->report($rows);
+        $this->report($rows, $today->toDateString());
 
         return self::SUCCESS;
     }
@@ -117,14 +121,16 @@ class ReconcileUsage extends Command
     /**
      * @param  list<array{date: string, our_cost: int, our_count: int, pixelforge_cost: int, pixelforge_count: int, difference: int}>  $rows
      */
-    private function report(array $rows): void
+    private function report(array $rows, string $today): void
     {
         $table = [];
 
         foreach ($rows as $row) {
             $matches = (new Reconciliation($row))->matches();
 
-            if (! $matches) {
+            $inProgress = $row['date'] === $today;
+
+            if (! $matches && ! $inProgress) {
                 Log::warning('Pixelforge usage differs from our provider cost.', [
                     'date' => $row['date'],
                     'our_cost' => Money::toDecimal($row['our_cost']),
@@ -136,7 +142,7 @@ class ReconcileUsage extends Command
             }
 
             $table[] = [
-                $row['date'],
+                $inProgress ? "{$row['date']} (so far)" : $row['date'],
                 Money::toDecimal($row['our_cost']),
                 Money::toDecimal($row['pixelforge_cost']),
                 Money::toDecimal($row['difference']),
