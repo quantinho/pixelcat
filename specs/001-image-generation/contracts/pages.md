@@ -62,10 +62,11 @@ type SharedProps = {
 {
   generations: { data: Generation[]; next_cursor: string | null } // newest first, 20 per page
   has_unfinished: boolean // drives usePoll(3000)
+  refreshed_generations?: Generation[] // only on polls that send ids[] of unfinished generations beyond the first page
 }
 ```
 
-Polling reloads only `generations`, `has_unfinished`, `balance` and `pixelforge_busy`.
+Polling reloads only `generations`, `has_unfinished`, `refreshed_generations`, `balance` and `pixelforge_busy`.
 
 ## `credits/Index`
 

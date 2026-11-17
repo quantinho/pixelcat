@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Actions\Generations\ApplyGenerationSnapshot;
 use App\Enums\GenerationStatus;
+use App\Jobs\SubmitGenerationToPixelforge;
 use App\Jobs\SyncGeneration;
 use App\Models\Generation;
 use App\Pixelforge\PixelforgeClient;
@@ -16,8 +17,8 @@ use Illuminate\Support\Facades\Log;
  * The hourly safety net behind the per-generation SyncGeneration jobs (spec FR-011): fetches
  * generations Pixelforge has but we haven't heard about for a while.
  *
- * Re-dispatching generations stuck in `submitting` (same Idempotency-Key) belongs here too; it
- * is added together with SubmitGenerationToPixelforge, which the submission work introduces.
+ * It also re-dispatches generations stuck in `submitting`, whose submit job was lost: the job
+ * resends with the same Idempotency-Key, so Pixelforge can never create a second generation.
  */
 class PollPixelforge extends Command
 {
@@ -32,6 +33,21 @@ class PollPixelforge extends Command
 
     public function handle(PixelforgeClient $client, ApplyGenerationSnapshot $apply): int
     {
+        // Every submit attempt touches updated_at; nothing for this long means the job is gone.
+        // A job that is still alive keeps its uniqueness lock, so this dispatch is then a no-op.
+        $stuck = Generation::query()
+            ->where('status', GenerationStatus::Submitting)
+            ->where('updated_at', '<', now()->subMinutes(self::STALE_AFTER_MINUTES))
+            ->get();
+
+        foreach ($stuck as $generation) {
+            SubmitGenerationToPixelforge::dispatch($generation);
+        }
+
+        if ($stuck->isNotEmpty()) {
+            $this->info("Re-dispatched {$stuck->count()} generation(s) stuck in submitting.");
+        }
+
         $stale = Generation::query()
             ->whereIn('status', [GenerationStatus::Queued, GenerationStatus::Processing])
             ->whereNotNull('pixelforge_id')

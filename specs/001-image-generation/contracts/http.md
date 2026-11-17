@@ -71,7 +71,7 @@ Request: estimate fields plus `id` (uuid from the form) and `pricing_version`.
 | Daily cap reached | `429` with error `daily_cap` and the reset time (UTC midnight) |
 | Validation | `422` field errors |
 
-### `GET /generations/{generation}/image`
+### `GET /generations/{generation}/image` (`generations.image`)
 
 Owner only (`404` otherwise). Redirects to a 5-minute signed URL of the stored copy, or to the
 Pixelforge URL while it is still valid, else `404` (the page shows "Image expired").

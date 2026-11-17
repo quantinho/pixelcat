@@ -6,6 +6,7 @@ use App\Enums\GenerationStatus;
 use App\Enums\LedgerEntryType;
 use App\Events\GenerationFinished;
 use App\Events\GenerationSucceeded;
+use App\Jobs\SubmitGenerationToPixelforge;
 use App\Jobs\SyncGeneration;
 use App\Models\Generation;
 use App\Models\User;
@@ -320,6 +321,16 @@ describe('pixelforge:poll', function () {
         expect($healthy->fresh()->status)->toBe(GenerationStatus::Succeeded);
     });
 
-    it('re-dispatches generations stuck in submitting with the same Idempotency-Key')
-        ->todo('needs SubmitGenerationToPixelforge from the Submission slice; see the report');
+    it('re-dispatches generations stuck in submitting, and leaves recent ones alone', function () {
+        Queue::fake();
+        $stuck = Generation::factory()->for($this->user)->submitting()->create(['pixelforge_id' => null]);
+        $recent = Generation::factory()->for($this->user)->submitting()->create(['pixelforge_id' => null]);
+        Generation::query()->whereKey($stuck->id)->update(['updated_at' => now()->subMinutes(20)]);
+
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+
+        Queue::assertPushed(SubmitGenerationToPixelforge::class, 1);
+        Queue::assertPushed(SubmitGenerationToPixelforge::class, fn ($job) => $job->generation->is($stuck));
+        Queue::assertNotPushed(SubmitGenerationToPixelforge::class, fn ($job) => $job->generation->is($recent));
+    });
 });

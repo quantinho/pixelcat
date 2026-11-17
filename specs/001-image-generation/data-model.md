@@ -38,7 +38,7 @@ Relationships: has many `generations`, has many `ledger_entries`.
 | `submit_attempts` | integer, default 0 | |
 | `had_ambiguous_attempt` | boolean, default false | forbids marking failed locally |
 | `is_anomaly` | boolean, default false | Pixelforge succeeded after we failed it |
-| `last_synced_at` | timestamptz, nullable | last snapshot applied; drives polling |
+| `last_synced_at` | timestamptz, nullable | last sync attempt (snapshot applied, or a fetch that failed for this generation); drives polling order |
 | `created_at`, `updated_at` | timestamptz | |
 
 Indexes: `(status, available_at, created_at)` for the dispatcher; `(user_id, created_at desc)`
