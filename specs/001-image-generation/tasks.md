@@ -175,15 +175,15 @@ profit and match flags.
 
 ### Tests for User Story 4
 
-- [ ] T069 [P] [US4] Feature tests for `pixelforge:reconcile` (completed days only; days by `Generation.completed_at`; anomalies included in our cost; match, mismatch and difference stored per data-model.md `Reconciliation`) in tests/Feature/Admin/ReconcileUsageTest.php
-- [ ] T070 [P] [US4] Feature tests for the report and deliveries pages (props per contracts/pages.md, today `in_progress`, 403 for non-admins) in tests/Feature/Admin/OperatorPagesTest.php
+- [x] T069 [P] [US4] Feature tests for `pixelforge:reconcile` (completed days only; days by `Generation.completed_at`; anomalies included in our cost; match, mismatch and difference stored per data-model.md `Reconciliation`) in tests/Feature/Admin/ReconcileUsageTest.php
+- [x] T070 [P] [US4] Feature tests for the report and deliveries pages (props per contracts/pages.md, today `in_progress`, 403 for non-admins) in tests/Feature/Admin/OperatorPagesTest.php
 
 ### Implementation for User Story 4
 
-- [ ] T071 [US4] Fill in `pixelforge:reconcile` (our cost grouped by the UTC date of `Generation.completed_at`, stores `Reconciliation.difference` per data-model.md) in app/Console/Commands/ReconcileUsage.php
-- [ ] T072 [US4] Implement `Admin\ReportController` and `Admin\DeliveriesController` with routes behind the `admin` gate in app/Http/Controllers/Admin/ and routes/operators.php
-- [ ] T073 [P] [US4] Implement the report page (days, per-user rows, totals, reconciliation status, anomalies) in resources/js/pages/admin/Report.vue
-- [ ] T074 [P] [US4] Implement the deliveries page in resources/js/pages/admin/Deliveries.vue
+- [x] T071 [US4] Fill in `pixelforge:reconcile` (our cost grouped by the UTC date of `Generation.completed_at`, stores `Reconciliation.difference` per data-model.md) in app/Console/Commands/ReconcileUsage.php
+- [x] T072 [US4] Implement `Admin\ReportController` and `Admin\DeliveriesController` with routes behind the `admin` gate in app/Http/Controllers/Admin/ and routes/operators.php
+- [x] T073 [P] [US4] Implement the report page (days, per-user rows, totals, reconciliation status, anomalies) in resources/js/pages/admin/Report.vue
+- [x] T074 [P] [US4] Implement the deliveries page in resources/js/pages/admin/Deliveries.vue
 
 ---
 
@@ -196,21 +196,21 @@ each step.
 
 ### Tests for User Story 5
 
-- [ ] T075 [P] [US5] Feature tests for the welcome credit on sign-up, the credits page and `POST /credits/purchase` (packs 5, 10, 25 only) in tests/Feature/Billing/CreditsTest.php
-- [ ] T076 [P] [US5] Multi-process test: two submissions (bootstrap scripts in tests/Concurrency/bin/ calling `CreateGeneration`) that together exceed the balance; only one is accepted in tests/Concurrency/ConcurrentHoldsTest.php
+- [x] T075 [P] [US5] Feature tests for the welcome credit on sign-up, the credits page and `POST /credits/purchase` (packs 5, 10, 25 only) in tests/Feature/Billing/CreditsTest.php
+- [x] T076 [P] [US5] Multi-process test: two submissions (bootstrap scripts in tests/Concurrency/bin/ calling `CreateGeneration`) that together exceed the balance; only one is accepted in tests/Concurrency/ConcurrentHoldsTest.php
 
 ### Implementation for User Story 5
 
-- [ ] T077 [US5] Grant the welcome credit (`LedgerEntry.type` `grant`, amount from `PIXELCAT_WELCOME_CREDIT`) at registration in app/Actions/Fortify/CreateNewUser.php
-- [ ] T078 [US5] Implement `CreditsController` (index, purchase) with routes in app/Http/Controllers/CreditsController.php and routes/credits.php
-- [ ] T079 [P] [US5] Implement the credits page (balance, packs, recent entries) in resources/js/pages/credits/Index.vue
-- [ ] T080 [P] [US5] Show the shared `balance` prop with a "Buy credits" link in the app header (FR-016) in resources/js/components/AppSidebarHeader.vue
+- [x] T077 [US5] Grant the welcome credit (`LedgerEntry.type` `grant`, amount from `PIXELCAT_WELCOME_CREDIT`) at registration in app/Actions/Fortify/CreateNewUser.php
+- [x] T078 [US5] Implement `CreditsController` (index, purchase) with routes in app/Http/Controllers/CreditsController.php and routes/credits.php
+- [x] T079 [P] [US5] Implement the credits page (balance, packs, recent entries) in resources/js/pages/credits/Index.vue
+- [x] T080 [P] [US5] Show the shared `balance` prop with a "Buy credits" link in the app header (FR-016) in resources/js/components/AppSidebarHeader.vue
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T081 [P] Seeders: admin and demo users with passwords from `ADMIN_PASSWORD` and `DEMO_USER_PASSWORD`; fake generations in every state only outside production (FR-022) in database/seeders/
+- [x] T081 [P] Seeders: admin and demo users with passwords from `ADMIN_PASSWORD` and `DEMO_USER_PASSWORD`; fake generations in every state only outside production (FR-022) in database/seeders/
 - [ ] T082 [P] Implement `pixelcat:demo-generations` (real API, keyword prompts, normal flow) in app/Console/Commands/DemoGenerations.php
 - [ ] T083 [P] Write README.md: what it does, screenshots, mermaid diagrams of the state machine and the money flow, local setup, tests, demo logins "sent with the application"
 - [ ] T084 [P] Write DECISIONS.md: each open question, options and choice (nanodollars, rounding up, in-request webhook apply, fake Pixelforge, polling, slot fairness, ambiguity rule, talking points on Typesense, ClickHouse, ECS and WebSockets)
