@@ -38,21 +38,24 @@ Each entry: decision, rationale, alternatives considered.
   `QUEUE_CONNECTION=cloud`, requires `aws/aws-sdk-php` and Laravel ≥ 13.19). Local and CI use
   the `database` driver. Jobs are idempotent because delivery is at least once.
 - **Rationale**: Managed queues are Cloud's recommended option, scale to zero and cost cents.
-  Per-job delays up to 15 minutes cover all our `Retry-After` and backoff values; jobs finish
-  far below the 90-second Flex limit.
+  Per-job delays are capped at 15 minutes by SQS: every delay is clamped to that, and a job
+  whose due time is further away re-dispatches itself with the rest. Jobs finish far below the
+  90-second Flex limit.
 - **Alternatives**: `queue:work` as a background process on the app cluster (stops when the app
   sleeps); worker clusters (Growth plan).
 - **Source**: https://laravel.com/cloud/docs/queues
 
 ## R5. Scheduler and scale to zero
 
-- **Decision**: Enable the Scheduler on the App cluster. Turn scale to zero off while reviewers
-  use the app.
-- **Rationale**: The poller, dispatcher sweep and reconciliation run every minute. Cloud wakes a
-  sleeping environment for scheduled tasks, but an every-minute task keeps it awake anyway, and
-  a sleeping app adds cold starts to webhook deliveries (10-second limit). Cost of an always-on
-  Flex 512 MB instance is about $6 a month.
-- **Alternatives**: Scale to zero with wake-ups (slower first requests, nothing saved).
+- **Decision**: Follow-ups are event-driven delayed jobs on the managed queue (FR-011); the
+  scheduler runs only an hourly sweep and the daily reconciliation. App compute and Serverless
+  Postgres both scale to zero when nobody uses the app.
+- **Rationale**: Serverless Postgres bills per awake second and sleeps after 5 idle minutes; an
+  every-minute scheduler querying it would keep it awake (~$19/month at the Dev size). With
+  event-driven jobs an idle app costs close to nothing. Flex compute wakes in under 500 ms, well
+  inside the 10-second webhook budget, and delayed jobs live in SQS, not the database.
+- **Alternatives**: Every-minute dispatcher and poller (simpler to reason about, keeps the
+  database awake); MySQL Dev (~$7/month, loses the Postgres guarantees the tests prove).
 - **Source**: https://laravel.com/cloud/docs/scheduled-tasks, https://laravel.com/cloud/docs/pricing
 
 ## R6. Database
@@ -69,8 +72,8 @@ Each entry: decision, rationale, alternatives considered.
   Postgres advisory lock. It counts active generations (global ≤ 3, per user ≤ 2), picks the
   oldest eligible `waiting` rows (`available_at <= now`, FIFO by `created_at`), moves them to
   `submitting` and dispatches one submit job each. It runs after every submission, after every
-  generation reaches a final state, after a concurrency 429 (delayed by `Retry-After`), and
-  every minute from the scheduler.
+  generation reaches a final state, after a concurrency 429 (delayed by `Retry-After`), and from
+  the hourly sweep.
 - **Rationale**: Simple, no long-running process, safe with several workers. The local count
   is an optimization; Pixelforge's 429 remains the source of truth (limits are per account
   across environments).
@@ -102,11 +105,13 @@ Each entry: decision, rationale, alternatives considered.
 
 ## R10. Polling and the request budget
 
-- **Decision**: The Pixelforge client records `X-RateLimit-Remaining` in cache after every
-  response. `pixelforge:poll` (every minute) fetches at most 10 stale generations and stops
-  early when the remaining budget is under 20, leaving room for creates.
-- **Rationale**: The 60 requests/minute limit is shared by every environment of the account.
-- **Alternatives**: Polling everything every minute (wastes the budget when webhooks work).
+- **Decision**: Each accepted generation schedules its own `SyncGeneration` job (+2 minutes,
+  then backoff 4, 8, then every 15 minutes) that fetches it only if no update arrived and stops
+  once it is final. The hourly sweep (`pixelforge:poll`) catches anything a lost job missed. Both
+  skip fetching when `X-RateLimit-Remaining` is under 20, leaving room for creates.
+- **Rationale**: The 60 requests/minute limit is shared by every environment of the account, and
+  a webhook usually arrives long before the first sync is due, so syncs rarely call Pixelforge.
+- **Alternatives**: Polling every minute (wastes the budget and keeps the database awake).
 
 ## R11. Image storage
 

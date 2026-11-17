@@ -88,9 +88,9 @@ app/
 ├── Pixelforge/              # PixelforgeClient, Pricing, GenerationSnapshot, WebhookSignature, exceptions
 ├── Dev/FakePixelforge/      # local-only fake API + webhook simulator
 ├── Enums/                   # GenerationStatus, Size, Quality, LedgerEntryType, DeliveryOutcome
-├── Events/                  # GenerationSucceeded, GenerationFinished
-├── Listeners/               # DispatchNextGenerations, StoreImageOnSuccess
-├── Jobs/                    # SubmitGenerationToPixelforge, StoreGenerationImage
+├── Events/                  # GenerationAccepted, GenerationSucceeded, GenerationFinished
+├── Listeners/               # DispatchNextGenerations, ScheduleSync, StoreImageOnSuccess
+├── Jobs/                    # SubmitGenerationToPixelforge, DispatchWaiting, ExpireWaitingGeneration, SyncGeneration, StoreGenerationImage
 ├── Console/Commands/        # Dispatch, Poll, Reconcile, ReplayEvent, DemoGenerations
 ├── Http/Controllers/        # Generation, Estimate, GenerationImage, Credits, PixelforgeWebhook, Admin/*
 ├── Http/Requests/           # GenerationRequest

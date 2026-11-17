@@ -232,9 +232,22 @@ balance after each step.
   endpoint answers 5xx so Pixelforge retries. Slow work (image copy) is queued.
 - **FR-010**: Webhooks, polling and replay MUST change state and money only through one "apply
   generation snapshot" operation, which locks the generation row.
-- **FR-011**: A scheduled job MUST every minute: re-dispatch generations stuck in `submitting`
-  (same Idempotency-Key; at most one submit job per generation at a time), and fetch generations in `queued` or `processing` with no update for
-  ~2 minutes, within a request budget that leaves room for new submissions.
+- **FR-011**: Follow-ups MUST be event-driven, so an idle app touches neither Pixelforge nor the
+  database (both can scale to zero):
+  - creating a generation dispatches the slot dispatcher and a delayed expiry check at the
+    waiting limit (FR-006);
+  - a generation reaching a final state, or a concurrency 429 (after `Retry-After`), dispatches
+    the slot dispatcher;
+  - Pixelforge accepting a generation schedules a delayed sync (+2 minutes) that fetches it if no
+    update arrived, and reschedules itself with backoff (2, 4, 8, then every 15 minutes) until the
+    generation is final;
+  - at most one submit job and one sync job run per generation at a time; syncs respect a
+    request budget that leaves room for new submissions;
+  - no job is delayed by more than 15 minutes (the SQS limit); a job whose due time is further
+    away re-dispatches itself with the remaining delay instead of acting early.
+  An hourly sweep is the safety net: it dispatches waiting generations, re-dispatches stuck
+  `submitting` ones (same Idempotency-Key), syncs `queued`/`processing` ones with no update for
+  over 15 minutes, and fails generations that waited too long.
 - **FR-012**: On success the app MUST store a copy of the image and keep showing it after the
   Pixelforge URL expires.
 
