@@ -96,7 +96,7 @@ complete with known usage, assert provider cost and user price to the nanodollar
 - [ ] T038 [P] [US1] Feature test for `POST /generations`: creates `waiting` with a hold; same id and params creates nothing new; same id with other params → 409 `id_reused`; changed pricing → 409 `prices_changed`; low balance → 422 `insufficient_balance`; 51st of the day → 429 `daily_cap`; validation per data-model.md `Generation.prompt`, `Generation.size`, `Generation.quality`, `Generation.reference_images`; and `GET /generate?retry={id}` pre-fills from the user's own failed generation, ignores other users' ids, and never submits anything (FR-015) in tests/Feature/Generations/CreateGenerationTest.php
 - [ ] T039 [P] [US1] Feature test for `DispatchWaitingGenerations` (at most 3 active, at most 2 per user, FIFO, respects `Generation.available_at`, waited too long → failed with hold released; `DispatchWaiting` is queued on create, on `GenerationFinished` and after a concurrency 429; `ExpireWaitingGeneration` fails only a still-waiting generation) in tests/Feature/Generations/DispatchWaitingGenerationsTest.php
 - [ ] T040 [P] [US1] Feature test for the submit job happy path (exact request body and headers, 202 → `queued` with `pixelforge_id` and rates stored) in tests/Feature/Generations/SubmitGenerationJobTest.php
-- [ ] T041 [P] [US1] Feature test for the webhook happy path (`generation.succeeded` charges exactly once; `generation.failed` is free; responses 204) in tests/Feature/Webhooks/WebhookApplyTest.php
+- [x] T041 [P] [US1] Feature test for the webhook happy path (`generation.succeeded` charges exactly once; `generation.failed` is free; responses 204) in tests/Feature/Webhooks/WebhookApplyTest.php
 
 ### Implementation for User Story 1
 
@@ -106,7 +106,7 @@ complete with known usage, assert provider cost and user price to the nanodollar
 - [ ] T045 [US1] Implement (a) `DispatchWaitingGenerations` (advisory lock, slot counts, `SKIP LOCKED`, only rows whose `Generation.available_at` has passed, waited-too-long failures) in app/Actions/Generations/DispatchWaitingGenerations.php; (b) the queued jobs `DispatchWaiting` and `ExpireWaitingGeneration` (due at the waiting limit, each delay capped at 15 minutes per FR-011) in app/Jobs/DispatchWaiting.php and app/Jobs/ExpireWaitingGeneration.php; (c) a `GenerationFinished` listener that queues `DispatchWaiting` in app/Listeners/DispatchNextGenerations.php
 - [ ] T046 [US1] Implement `SubmitGenerationToPixelforge` happy path and definite rejections (400, 401, 409, 422, daily 429 → failed and released) in app/Jobs/SubmitGenerationToPixelforge.php
 - [ ] T047 [US1] Fill in `pixelforge:dispatch` (the hourly sweep's dispatch and expiry part) in app/Console/Commands/DispatchGenerations.php
-- [ ] T048 [US1] Implement `PixelforgeWebhookController` (signature first, delivery recorded outside the transaction with `WebhookDelivery.payload` left null when rejected, dedupe insert and `ApplyGenerationSnapshot` in one transaction, outcomes per contracts/http.md) and its route in app/Http/Controllers/PixelforgeWebhookController.php and routes/webhooks.php
+- [x] T048 [US1] Implement `PixelforgeWebhookController` (signature first, delivery recorded outside the transaction with `WebhookDelivery.payload` left null when rejected, dedupe insert and `ApplyGenerationSnapshot` in one transaction, outcomes per contracts/http.md) and its route in app/Http/Controllers/PixelforgeWebhookController.php and routes/webhooks.php
 - [ ] T049 [P] [US1] Implement `useEstimate` (debounced `POST /generations/estimate`, cancels stale requests) in resources/js/composables/useEstimate.ts
 - [ ] T050 [P] [US1] Implement `EstimatePanel` (range, likely, breakdown, rates age, "Failed images are free") in resources/js/components/pixelcat/EstimatePanel.vue
 - [ ] T051 [US1] Implement the Create page (form, size and quality pickers, reference URLs, keyword chips, "Surprise me with a cat", Cmd/Ctrl+Enter, form-generated UUID renewed after success and on `id_reused`, handling of `prices_changed`, `insufficient_balance` and `daily_cap`) in resources/js/pages/generations/Create.vue
@@ -125,17 +125,17 @@ webhooks, times out after creating, answers 429/503; assert states and charges.
 ### Tests for User Story 2
 
 - [ ] T052 [P] [US2] Feature tests for every create-side row of the spec's Failure Modes table (503 backoff and cap; rate 429; concurrency 429 → `waiting` with `available_at`; timeout and other 5xx → stays `submitting` with `had_ambiguous_attempt`, never failed; a crash after acceptance replays the same Pixelforge generation; job uniqueness) in tests/Feature/Generations/SubmitGenerationFailureModesTest.php
-- [ ] T053 [P] [US2] Feature tests for webhook robustness (bad signature and timestamps → 400 and `rejected` with headers only; duplicate; out of order; event before the POST returns matched by `metadata.local_id`; unknown generation; `ping`; exception → 500 and `error` delivery, then redelivery applies) in tests/Feature/Webhooks/WebhookRobustnessTest.php
+- [x] T053 [P] [US2] Feature tests for webhook robustness (bad signature and timestamps → 400 and `rejected` with headers only; duplicate; out of order; event before the POST returns matched by `metadata.local_id`; unknown generation; `ping`; exception → 500 and `error` delivery, then redelivery applies) in tests/Feature/Webhooks/WebhookRobustnessTest.php
 - [ ] T054 [P] [US2] Feature tests for `SyncGeneration` (scheduled on `GenerationAccepted`; does nothing if an update arrived or the generation is final; fetches and applies otherwise; reschedules with backoff 2, 4, 8, 15 minutes) and for `pixelforge:poll` (re-dispatches stale `submitting`, fetches `queued`/`processing` with no update for 15 minutes, at most 10, stops when the budget is under 20, `invalid_api_key`/`not_found` leave state unchanged) in tests/Feature/Generations/PollPixelforgeTest.php
-- [ ] T055 [P] [US2] Multi-process test: two processes (each running a small bootstrap script in tests/Concurrency/bin/ that applies a given event) apply the same event at once; exactly one charge (SC-003) in tests/Concurrency/ExactlyOnceChargeTest.php
-- [ ] T056 [P] [US2] Feature test for `pixelforge:replay-event` (re-applies a stored event through `ApplyGenerationSnapshot`; replaying a final event changes nothing; unknown event id fails with a clear message) (FR-021) in tests/Feature/Webhooks/ReplayEventTest.php
+- [x] T055 [P] [US2] Multi-process test: two processes (each running a small bootstrap script in tests/Concurrency/bin/ that applies a given event) apply the same event at once; exactly one charge (SC-003) in tests/Concurrency/ExactlyOnceChargeTest.php
+- [x] T056 [P] [US2] Feature test for `pixelforge:replay-event` (re-applies a stored event through `ApplyGenerationSnapshot`; replaying a final event changes nothing; unknown event id fails with a clear message) (FR-021) in tests/Feature/Webhooks/ReplayEventTest.php
 
 ### Implementation for User Story 2
 
 - [ ] T057 [US2] Complete `SubmitGenerationToPixelforge` failure handling (`ShouldBeUnique`, `Retry-After` plus exponential backoff, 503 cap of 5, concurrency → `waiting` with a new `Generation.available_at`, ambiguous attempts set `Generation.had_ambiguous_attempt` and retry up to 10-minute backoff, never failing locally once it is set, timeline events) in app/Jobs/SubmitGenerationToPixelforge.php
 - [ ] T058 [US2] Implement `SyncGeneration` (unique per generation, budget-aware, self-rescheduling, delays capped at 15 minutes) and a `GenerationAccepted` listener that schedules it in app/Jobs/SyncGeneration.php and app/Listeners/ScheduleSync.php; fill in `pixelforge:poll` (the hourly sweep, staleness by `Generation.last_synced_at`) in app/Console/Commands/PollPixelforge.php
-- [ ] T059 [US2] Implement `pixelforge:replay-event` in app/Console/Commands/ReplayEvent.php
-- [ ] T060 [US2] Implement the local fake Pixelforge (API routes with the real shapes, errors and keyword behaviour; a simulator job that advances generations and posts signed webhooks, including duplicates and reordering) in app/Dev/FakePixelforge/ and routes/fake-pixelforge.php
+- [x] T059 [US2] Implement `pixelforge:replay-event` in app/Console/Commands/ReplayEvent.php
+- [x] T060 [US2] Implement the local fake Pixelforge (API routes with the real shapes, errors and keyword behaviour; a simulator job that advances generations and posts signed webhooks, including duplicates and reordering) in app/Dev/FakePixelforge/ and routes/fake-pixelforge.php
 
 **Checkpoint**: US1 and US2 together are the correct-money core of the assessment.
 
@@ -150,12 +150,12 @@ webhooks, times out after creating, answers 429/503; assert states and charges.
 ### Tests for User Story 3
 
 - [ ] T061 [P] [US3] Feature test for the history page (props per contracts/pages.md, newest first, cursor pagination, `has_unfinished`, only own generations) in tests/Feature/Generations/HistoryPageTest.php
-- [ ] T062 [P] [US3] Feature tests for `StoreGenerationImage` (stores once, retries, skips when stored) and `GET /generations/{id}/image` (owner only, signed redirect, Pixelforge URL fallback, 404 when expired) in tests/Feature/Generations/GenerationImageTest.php
+- [x] T062 [P] [US3] Feature tests for `StoreGenerationImage` (stores once, retries, skips when stored) and `GET /generations/{id}/image` (owner only, signed redirect, Pixelforge URL fallback, 404 when expired) in tests/Feature/Generations/GenerationImageTest.php
 
 ### Implementation for User Story 3
 
-- [ ] T063 [US3] Implement `StoreGenerationImage` and a `GenerationSucceeded` listener that dispatches it in app/Jobs/StoreGenerationImage.php and app/Listeners/StoreImageOnSuccess.php
-- [ ] T064 [US3] Implement `GenerationImageController` and its route in app/Http/Controllers/GenerationImageController.php and routes/images.php
+- [x] T063 [US3] Implement `StoreGenerationImage` and a `GenerationSucceeded` listener that dispatches it in app/Jobs/StoreGenerationImage.php and app/Listeners/StoreImageOnSuccess.php
+- [x] T064 [US3] Implement `GenerationImageController` and its route in app/Http/Controllers/GenerationImageController.php and routes/images.php
 - [ ] T065 [US3] Implement `GenerationHistoryController@index` and its route in app/Http/Controllers/GenerationHistoryController.php and routes/generations.php
 - [ ] T066 [P] [US3] Implement `StatusBadge`, `Timeline`, `GenerationCard` (image, prices, estimate position bar, error with "You weren't charged", "Try again" link) in resources/js/components/pixelcat/
 - [ ] T067 [P] [US3] Implement `BusyNotice` and `CatMascot` (empty state, failure state; never next to prices) in resources/js/components/pixelcat/
