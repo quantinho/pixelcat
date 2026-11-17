@@ -12,7 +12,6 @@ use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Process\Pool;
 use Illuminate\Support\Facades\Process;
 use Tests\Support\FakePixelforge;
-use Tests\TestCase;
 
 /**
  * SC-003 / US2 scenario 7: the same success processed by two requests at the same moment
@@ -23,7 +22,8 @@ use Tests\TestCase;
  * The data must be committed for the other processes to see it, so these tests truncate
  * instead of wrapping each test in a transaction.
  */
-uses(TestCase::class, DatabaseTruncation::class);
+// The test case comes from tests/Pest.php; child processes need committed rows, so truncate.
+pest()->use(DatabaseTruncation::class);
 
 beforeEach(function () {
     $this->user = User::factory()->create();
