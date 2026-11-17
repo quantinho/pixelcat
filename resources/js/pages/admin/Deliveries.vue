@@ -40,6 +40,7 @@ function utc(iso: string): string {
 
     <div class="flex flex-1 flex-col gap-6 p-4 md:p-6">
         <Heading
+            level="h1"
             title="Webhook deliveries"
             description="Every POST Pixelforge sent to the webhook, newest first, and what we did with it."
         />
