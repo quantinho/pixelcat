@@ -1,12 +1,14 @@
 <?php
 
 use App\Enums\DeliveryOutcome;
+use App\Http\Resources\MoneyResource;
 use App\Models\Generation;
 use App\Models\Reconciliation;
 use App\Models\User;
 use App\Models\WebhookDelivery;
 use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\FakePixelforge;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-17 10:00:00', 'UTC'));
@@ -264,4 +266,106 @@ describe('deliveries', function () {
                 ->where('deliveries.data.4.event_id', 'evt_1')
                 ->where('deliveries.next_cursor', null));
     });
+});
+
+describe('report sums and window', function () {
+    beforeEach(function () {
+        $this->alice = User::factory()->create(['email' => 'alice@example.com']);
+    });
+
+    it('puts two billed generations of one user on one UTC day in one row', function () {
+        reportBilledGeneration($this->alice, '2026-11-16 00:00:00', 100_000_001, 125_000_001);
+        reportBilledGeneration($this->alice, '2026-11-16 23:59:59', 200_000_002, 250_000_003);
+
+        $this->actingAs($this->admin)->get('/admin/report')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('days', 1)
+                ->where('days.0.date', '2026-11-16')
+                ->where('days.0.generations', 2)
+                ->where('days.0.charged.exact', '0.375000004')
+                ->where('days.0.provider_cost.exact', '0.300000003')
+                ->where('days.0.profit.exact', '0.075000001')
+                ->has('days.0.users', 1)
+                ->where('days.0.users.0.user', 'alice@example.com')
+                ->where('days.0.users.0.generations', 2)
+                ->where('days.0.users.0.charged.exact', '0.375000004')
+                ->where('days.0.users.0.provider_cost.exact', '0.300000003'));
+    });
+
+    it('keeps sums beyond float precision exact', function () {
+        // 2^53 + 1 nanodollars: a float would round it to 2^53.
+        reportBilledGeneration($this->alice, '2026-11-16 08:00:00', 4_503_599_627_370_497, 5_629_499_534_213_122);
+        reportBilledGeneration($this->alice, '2026-11-16 09:00:00', 4_503_599_627_370_496, 5_629_499_534_213_120);
+
+        $this->actingAs($this->admin)->get('/admin/report')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('days.0.provider_cost.exact', '9007199.254740993')
+                ->where('days.0.charged.exact', '11258999.068426242')
+                ->where('days.0.profit.exact', '2251799.813685249')
+                ->where('days.0.users.0.provider_cost.exact', '9007199.254740993')
+                ->where('totals.provider_cost.exact', '9007199.254740993')
+                ->where('totals.charged.exact', '11258999.068426242'));
+    });
+
+    it('keeps a single amount beyond float precision exact', function () {
+        reportBilledGeneration($this->alice, '2026-11-16 08:00:00', 9_007_199_254_740_993, 11_258_999_068_426_242);
+
+        $this->actingAs($this->admin)->get('/admin/report')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('days.0.provider_cost.exact', '9007199.254740993')
+                ->where('days.0.charged.exact', '11258999.068426242')
+                ->where('days.0.profit.exact', '2251799.813685249'));
+    });
+
+    it('includes the first day of the 30-day window from 00:00:00 UTC, not the second before', function () {
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 23:59:59', 'UTC'));
+        // Today and the 29 days before: the window starts on 2026-10-19.
+        reportBilledGeneration($this->alice, '2026-10-19 00:00:00', 7_000_000, 8_750_000);
+        reportBilledGeneration($this->alice, '2026-10-18 23:59:59', 1_000_000, 1_250_000);
+
+        $this->actingAs($this->admin)->get('/admin/report')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('days', 1)
+                ->where('days.0.date', '2026-10-19')
+                ->where('days.0.generations', 1)
+                ->where('days.0.provider_cost.exact', '0.007000000')
+                ->where('totals.provider_cost.exact', '0.007000000'));
+    });
+
+    it('shows the same provider cost and count for a day as pixelforge:reconcile stores', function () {
+        FakePixelforge::fake();
+        $bob = User::factory()->create(['email' => 'bob@example.com']);
+        reportBilledGeneration($this->alice, '2026-11-16 00:00:00', 123_456_789, 154_320_987);
+        reportBilledGeneration($this->alice, '2026-11-16 12:30:00', 1, 2);
+        reportBilledGeneration($bob, '2026-11-16 23:59:59', 373_875_000, 467_343_750);
+        reportAnomaly($bob, '2026-11-16 18:00:00', 30_000_000);
+        // Not billed, and on the neighbouring days: in neither figure for the 16th.
+        Generation::factory()->for($bob)->failed()->create(['completed_at' => CarbonImmutable::parse('2026-11-16 13:00:00', 'UTC')]);
+        reportBilledGeneration($bob, '2026-11-15 23:59:59', 5_000_000, 6_250_000);
+        reportBilledGeneration($bob, '2026-11-17 00:00:00', 9_000_000, 11_250_000);
+
+        $this->artisan('pixelforge:reconcile', ['--days' => 1])->assertSuccessful();
+        $reconciliation = Reconciliation::query()->whereDate('date', '2026-11-16')->sole();
+
+        expect($reconciliation->our_count)->toBe(4)
+            ->and($reconciliation->our_cost)->toBe(123_456_789 + 1 + 373_875_000 + 30_000_000);
+
+        $this->actingAs($this->admin)->get('/admin/report')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('days.1.date', '2026-11-16')
+                ->where('days.1.generations', $reconciliation->our_count)
+                ->where('days.1.provider_cost', MoneyResource::format($reconciliation->our_cost)));
+    });
+});
+
+describe('shared props', function () {
+    it('tells the frontend whether the signed-in user is an admin', function (bool $admin) {
+        FakePixelforge::fake();
+        // fresh(): a user read back from the database, as on a real request.
+        $user = $admin ? $this->admin->fresh() : User::factory()->create()->fresh();
+
+        $this->actingAs($user)->get('/generations')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('auth.user.is_admin', $admin));
+    })->with(['admin' => true, 'normal user' => false]);
 });
