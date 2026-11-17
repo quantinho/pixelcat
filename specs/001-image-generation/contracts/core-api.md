@@ -151,8 +151,10 @@ final class ApplyGenerationSnapshot {
 ```
 
 `$source` is one of `submit`, `webhook`, `poll`, `replay` and is stored on timeline events.
-After commit it dispatches `App\Events\GenerationSucceeded` (success) and
-`App\Events\GenerationFinished` (any final state), each carrying the `Generation`.
+After commit it dispatches `App\Events\GenerationAccepted` (moved from `waiting`/`submitting`
+to `queued` or `processing`; the sync slice schedules `SyncGeneration` from it),
+`App\Events\GenerationSucceeded` (success) and `App\Events\GenerationFinished` (any final
+state), each carrying the `Generation`.
 
 ## Behaviour details settled during implementation
 

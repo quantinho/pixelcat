@@ -7,6 +7,7 @@ use App\Billing\Ledger;
 use App\Billing\Money;
 use App\Enums\DeliveryOutcome;
 use App\Enums\GenerationStatus;
+use App\Events\GenerationAccepted;
 use App\Events\GenerationFinished;
 use App\Events\GenerationSucceeded;
 use App\Models\Generation;
@@ -36,8 +37,12 @@ final class ApplyGenerationSnapshot
      */
     public function __invoke(Generation $generation, GenerationSnapshot $snapshot, string $source): DeliveryOutcome
     {
-        $outcome = DB::transaction(function () use ($generation, $snapshot, $source) {
+        $wasAccepted = false;
+
+        $outcome = DB::transaction(function () use ($generation, $snapshot, $source, &$wasAccepted) {
             $locked = Generation::query()->whereKey($generation->id)->lockForUpdate()->firstOrFail();
+
+            $wasAccepted = $locked->status->rank() >= GenerationStatus::Queued->rank();
 
             $this->fillMissingData($locked, $snapshot);
 
@@ -52,6 +57,11 @@ final class ApplyGenerationSnapshot
 
             return $outcome;
         });
+
+        // Pixelforge has it now and no result yet: the sync slice schedules a follow-up.
+        if ($outcome === DeliveryOutcome::Applied && ! $wasAccepted && ! $generation->status->isFinal()) {
+            GenerationAccepted::dispatch($generation);
+        }
 
         if ($outcome === DeliveryOutcome::Applied && $generation->status->isFinal()) {
             if ($generation->status === GenerationStatus::Succeeded) {
