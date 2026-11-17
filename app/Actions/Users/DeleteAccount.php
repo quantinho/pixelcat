@@ -2,6 +2,7 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\GenerationStatus;
 use App\Models\Generation;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,7 @@ class DeleteAccount
 {
     public function __invoke(User $user): void
     {
-        $imagePaths = $user->generations()->whereNotNull('image_path')->pluck('image_path')->all();
+        $imagePaths = $user->generations()->whereIn('status', self::finalStatuses())->whereNotNull('image_path')->pluck('image_path')->all();
 
         DB::transaction(function () use ($user) {
             $user->passkeys()->delete();
@@ -28,8 +29,10 @@ class DeleteAccount
                 DB::table((string) config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
             }
 
-            // Prompts and images are the person's content; nothing about money is in them.
-            Generation::query()->where('user_id', $user->id)->update([
+            // Prompts and images are the person's content; nothing about money is in them. Only
+            // finished generations are scrubbed: an unfinished one may still be (re)sent with
+            // its Idempotency-Key, and a different prompt would be a different request.
+            Generation::query()->where('user_id', $user->id)->whereIn('status', self::finalStatuses())->update([
                 'prompt' => 'Deleted',
                 'reference_images' => json_encode([]),
                 'image_path' => null,
@@ -52,5 +55,11 @@ class DeleteAccount
         if ($imagePaths !== []) {
             Storage::disk('images')->delete($imagePaths);
         }
+    }
+
+    /** @return list<string> */
+    private static function finalStatuses(): array
+    {
+        return [GenerationStatus::Succeeded->value, GenerationStatus::Failed->value];
     }
 }

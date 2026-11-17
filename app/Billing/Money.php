@@ -65,24 +65,6 @@ final class Money
     }
 
     /**
-     * Price of one token in nanodollars for a rate quoted in USD per 1M tokens,
-     * e.g. "12.50" → 12_500. Throws if a single token is not a whole nanodollar.
-     *
-     * Not used for costs: CalculateCost checks wholeness on the total, as the spec says.
-     */
-    public static function perTokenNanos(string $ratePerMillion): int
-    {
-        try {
-            return BigDecimal::of($ratePerMillion)
-                ->multipliedBy(self::NANOS_PER_DOLLAR)
-                ->dividedBy(1_000_000, 0)
-                ->toInt();
-        } catch (MathException $e) {
-            throw new InvalidArgumentException("Rate [{$ratePerMillion}] per 1M tokens is not a whole number of nanodollars per token.", previous: $e);
-        }
-    }
-
-    /**
      * Add a percentage markup, rounding up to the next nanodollar.
      * This is the only place money is rounded.
      */

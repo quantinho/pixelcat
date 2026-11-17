@@ -41,6 +41,7 @@ it('returns the estimate range, breakdown and balance', function () {
             ['type' => 'output_tokens', 'tokens' => '1,100', 'cost' => '$0.0440'],
             ['type' => 'reasoning_tokens', 'tokens' => '200–2,000', 'cost' => '$0.0025–$0.0250'],
         ],
+        'markup_percent' => 25,
         'pricing_version' => app(PixelforgeClient::class)->pricing()->version(),
         'rates_fetched_at' => $response->json('rates_fetched_at'),
         'affordable' => true,
@@ -61,7 +62,8 @@ it('prices the worked example', function () {
     // The docs' maximum usage (115 text tokens, 8,000 reasoning) is the estimate's maximum.
     $response->assertOk()
         ->assertJsonPath('max.exact', '0.467343750')
-        ->assertJsonPath('breakdown.1', ['type' => 'input_image_tokens', 'tokens' => '1,530', 'cost' => '$0.0153']);
+        ->assertJsonPath('breakdown.1', ['type' => 'input_image_tokens', 'tokens' => '1,530', 'cost' => '$0.0153'])
+        ->assertJsonPath('markup_percent', 25);
 });
 
 it('accepts an empty prompt while the user is typing', function () {

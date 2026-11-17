@@ -55,6 +55,7 @@ export type Estimate = {
     likely: Money;
     max: Money;
     breakdown: EstimateBreakdownLine[];
+    markup_percent: number;
     pricing_version: string;
     rates_fetched_at: string | null;
     affordable: boolean;

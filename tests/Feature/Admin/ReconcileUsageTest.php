@@ -58,6 +58,14 @@ it('shows today so far with --today without storing it', function () {
         ->and(storedReconciliation('2026-11-16'))->not->toBeNull();
 });
 
+it('keeps --today within the 92 days Pixelforge accepts', function () {
+    $this->artisan('pixelforge:reconcile', ['--days' => 92, '--today' => true])->assertFailed();
+    $this->artisan('pixelforge:reconcile', ['--days' => 91, '--today' => true])->assertSuccessful();
+
+    Http::assertSent(fn (Request $request) => str_contains($request->url(), '/usage')
+        && $request['start_date'] === '2026-08-18' && $request['end_date'] === '2026-11-17');
+});
+
 it('does not log a difference for today, which is still in progress', function () {
     reconcileCompletedGeneration('2026-11-17 09:00:00', 373_875_000);
     Log::spy();

@@ -51,6 +51,7 @@ class EstimateController extends Controller
                 'tokens' => $this->range(number_format($line['min_tokens']), number_format($line['max_tokens'])),
                 'cost' => $this->range(Money::display($line['min_cost']), Money::display($line['max_cost'])),
             ], $estimate->breakdown),
+            'markup_percent' => $estimate->markupPercent,
             'pricing_version' => $estimate->pricingVersion,
             'rates_fetched_at' => $this->ratesFetchedAt($pricing),
             'affordable' => $balance >= $estimate->max,

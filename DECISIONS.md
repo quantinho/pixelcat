@@ -171,6 +171,34 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 - **Why:** a managed queue, scheduler, Postgres and object storage with no infrastructure code,
   scaling to zero when idle. Every merge to `main` deploys only after CI passes.
 
+## Known trade-offs, and what I would do next
+
+Weak spots I know about, so they are decisions rather than surprises.
+
+- **An ambiguous create keeps a slot until Pixelforge answers.** After a timeout we resend with
+  the same key and never fail it locally (7), so during a long Pixelforge outage it stays
+  `submitting`, holds its estimate and counts against the 3 shared slots. Next: settle the
+  question with `GET /v1/generations` (match `metadata.local_id`), then cap the resends.
+- **A concurrency 429 is read as "nothing was created".** The docs say "Rejected requests create
+  nothing and cost nothing", and that an idempotent replay "doesn't count against the
+  concurrency or daily limits". They don't spell out the order of those checks for a resend of
+  an earlier attempt; if that ever proved wrong, the same list lookup settles it.
+- **Prices can rise while an image waits for a slot.** The estimate uses rates cached for up to
+  5 minutes and a generation can wait 15. The user pays the real price even above the hold
+  (the balance may go below zero) and we log a warning. Next: fetch pricing uncached on
+  submit, and ask before charging above the hold.
+- **The report's reconciliation is refreshed nightly.** `pixelforge:reconcile` runs at 00:15 UTC
+  over the last 7 days; `--today` checks the day in progress from the CLI. Next: a "Check now"
+  button for operators.
+- **Fail-and-release exists in three places:** a waiting generation that times out
+  (`DispatchWaitingGenerations`), a submit Pixelforge refused (`SubmitGenerationToPixelforge`)
+  and a failure Pixelforge reports (`ApplyGenerationSnapshot`). Each locks the row and checks
+  its own preconditions; the shared part (status, release, timeline) should become one
+  `FailGeneration` action.
+- **It is bigger than the brief asked for.** For a 3-hour version I would keep the money core,
+  webhooks and the ambiguity rule, and replace slot fairness and the delayed-job chain (10, 11)
+  with a scheduled poll every minute.
+
 ## Not built, and how I would add them
 
 - **Prompt search (Typesense):** index prompts through Laravel Scout and search history from the

@@ -19,11 +19,4 @@ class PixelforgeRejected extends RuntimeException
         parent::__construct($message !== '' ? $message : "Pixelforge rejected the request: {$errorCode} ({$httpStatus}).");
     }
 
-    /**
-     * Rate and concurrency limits and overloads are worth retrying; the rest are final.
-     */
-    public function isRetryable(): bool
-    {
-        return in_array($this->errorCode, ['rate_limit_exceeded', 'concurrency_limit_exceeded', 'overloaded'], true);
-    }
 }

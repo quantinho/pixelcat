@@ -109,7 +109,7 @@ class PixelforgeWebhookController extends Controller
             // Lock the generation before inserting the event. The event's foreign key takes a
             // share lock on the generation row; two deliveries holding that share lock while
             // both waiting for the update lock in ApplyGenerationSnapshot would deadlock.
-            $generation = $this->findAndLockGeneration($snapshot);
+            $generation = Generation::forSnapshot($snapshot, lock: true);
 
             // The primary key is the dedupe: a concurrent insert of the same id waits for
             // the other transaction, then inserts nothing.
@@ -149,33 +149,6 @@ class PixelforgeWebhookController extends Controller
         }
 
         return $result;
-    }
-
-    /**
-     * Our id travels as metadata.local_id, so an event can be matched even before the
-     * create request has returned; the Pixelforge id covers anything without it.
-     */
-    private function findAndLockGeneration(GenerationSnapshot $snapshot): ?Generation
-    {
-        if ($snapshot->localId !== null && Str::isUuid($snapshot->localId)) {
-            $generation = Generation::query()->whereKey($snapshot->localId)->lockForUpdate()->first();
-
-            // metadata.local_id is only trusted when it agrees with the Pixelforge id we already
-            // have, so one generation's usage can never be charged to another.
-            if ($generation !== null && ($generation->pixelforge_id === null || $generation->pixelforge_id === $snapshot->id)) {
-                return $generation;
-            }
-
-            if ($generation !== null) {
-                Log::critical('A webhook names a local generation that has a different Pixelforge id.', [
-                    'generation_id' => $generation->id,
-                    'our_pixelforge_id' => $generation->pixelforge_id,
-                    'webhook_pixelforge_id' => $snapshot->id,
-                ]);
-            }
-        }
-
-        return Generation::query()->where('pixelforge_id', $snapshot->id)->lockForUpdate()->first();
     }
 
     private function generationOfStoredEvent(string $eventId): ?Generation

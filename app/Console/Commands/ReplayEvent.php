@@ -7,7 +7,6 @@ use App\Models\Generation;
 use App\Models\WebhookEvent;
 use App\Pixelforge\GenerationSnapshot;
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 
 /**
  * Re-applies a stored webhook event (spec FR-021), e.g. after fixing a bug. It goes through
@@ -39,7 +38,7 @@ class ReplayEvent extends Command
         }
 
         $snapshot = GenerationSnapshot::fromArray($object);
-        $generation = $event->generation ?? $this->findGeneration($snapshot);
+        $generation = $event->generation ?? Generation::forSnapshot($snapshot);
 
         if ($generation === null) {
             $this->error("No generation matches event [{$eventId}] (Pixelforge id {$snapshot->id}).");
@@ -52,18 +51,5 @@ class ReplayEvent extends Command
         $this->info("Event [{$eventId}] for generation {$generation->id}: {$outcome->value}; status is now {$generation->status->value}.");
 
         return self::SUCCESS;
-    }
-
-    private function findGeneration(GenerationSnapshot $snapshot): ?Generation
-    {
-        if ($snapshot->localId !== null && Str::isUuid($snapshot->localId)) {
-            $generation = Generation::query()->find($snapshot->localId);
-
-            if ($generation !== null) {
-                return $generation;
-            }
-        }
-
-        return Generation::query()->where('pixelforge_id', $snapshot->id)->first();
     }
 }

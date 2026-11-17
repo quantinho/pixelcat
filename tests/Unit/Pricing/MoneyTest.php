@@ -92,28 +92,6 @@ describe('displayCents', function () {
     ]);
 });
 
-describe('perTokenNanos', function () {
-    it('converts a rate per 1M tokens to nanodollars per token', function (string $rate, int $nanos) {
-        expect(Money::perTokenNanos($rate))->toBe($nanos);
-    })->with([
-        'input text' => ['5.00', 5_000],
-        'input image' => ['10.00', 10_000],
-        'output' => ['40.00', 40_000],
-        'reasoning' => ['12.50', 12_500],
-        'no decimals' => ['40', 40_000],
-        'one nanodollar per token' => ['0.001', 1],
-        'zero' => ['0.00', 0],
-    ]);
-
-    it('rejects a rate that is not a whole nanodollar per token', function (string $rate) {
-        expect(fn () => Money::perTokenNanos($rate))->toThrow(Exception::class);
-    })->with([
-        'a tenth of a nanodollar' => ['0.0001'],
-        'one and a half nanodollars' => ['0.0015'],
-        'not a number' => ['twelve'],
-    ]);
-});
-
 describe('applyMarkup', function () {
     it('multiplies by (100 + percent) / 100 and rounds up to the next nanodollar', function (int $nanos, int $percent, int $expected) {
         expect(Money::applyMarkup($nanos, $percent))->toBe($expected);
