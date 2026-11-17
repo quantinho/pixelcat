@@ -5,6 +5,9 @@ use App\Console\Commands\DemoGenerations;
 use App\Enums\GenerationStatus;
 use App\Models\Generation;
 use App\Models\User;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakePixelforge;
 
@@ -41,4 +44,18 @@ it('refuses an unknown user', function () {
     $this->artisan('pixelcat:demo-generations', ['--user' => 'nobody@pixelcat.test'])
         ->expectsOutputToContain('No user with the email')
         ->assertFailed();
+});
+
+it('stops with a message when Pixelforge pricing is unreachable', function () {
+    User::factory()->create(['email' => 'demo@pixelcat.test']);
+    Cache::flush();
+    Http::swap(new Factory); // drop the fake Pixelforge
+    Http::preventStrayRequests();
+    Http::fake(fn () => Http::response(['error' => ['type' => 'server_error']], 503));
+
+    $this->artisan('pixelcat:demo-generations')
+        ->expectsOutputToContain('Could not read Pixelforge pricing')
+        ->assertFailed();
+
+    expect(Generation::query()->count())->toBe(0);
 });

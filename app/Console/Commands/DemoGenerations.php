@@ -7,6 +7,8 @@ use App\Enums\Quality;
 use App\Enums\Size;
 use App\Models\User;
 use App\Pixelforge\PixelforgeClient;
+use App\Pixelforge\PixelforgeRejected;
+use App\Pixelforge\PixelforgeUnavailable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -42,7 +44,14 @@ class DemoGenerations extends Command
             return self::FAILURE;
         }
 
-        $pricingVersion = $pixelforge->pricing()->version();
+        try {
+            $pricingVersion = $pixelforge->pricing()->version();
+        } catch (PixelforgeUnavailable|PixelforgeRejected $e) {
+            $this->error('Could not read Pixelforge pricing: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $created = 0;
 
         foreach (self::PROMPTS as [$prompt, $size, $quality]) {
