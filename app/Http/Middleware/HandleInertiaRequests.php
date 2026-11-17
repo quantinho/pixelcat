@@ -2,6 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Billing\Ledger;
+use App\Http\Resources\MoneyResource;
+use App\Pixelforge\PixelforgeClient;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -42,6 +45,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'balance' => fn () => $request->user()
+                ? MoneyResource::format(app(Ledger::class)->balance($request->user()))
+                : null,
+            'pixelforge_busy' => fn () => $request->user() !== null && app(PixelforgeClient::class)->isBusy(),
         ];
     }
 }
