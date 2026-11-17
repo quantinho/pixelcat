@@ -361,8 +361,8 @@ All from the [API docs](https://pixelforge.promptedit.dev/docs):
 | Failure | Source | Handling | User sees |
 |---------|--------|----------|-----------|
 | `content_policy_violation` 400 | create | `failed`, release hold | "This prompt was rejected. You weren't charged." |
-| `overloaded` 503 | create | retry after `Retry-After`, backoff; `failed` after the cap | "Pixelforge is busy, retrying…" |
-| `rate_limit_exceeded` 429 | any | wait `Retry-After`, retry, capped | "Waiting for Pixelforge…" |
+| `overloaded` 503 | create | retry after `Retry-After`, backoff; `failed` after the cap | while retrying: "Pixelforge is busy, retrying…"; if it gives up: "Pixelforge is too busy right now. You weren't charged." |
+| `rate_limit_exceeded` 429 | any | wait `Retry-After`, retry, capped | while retrying: "Waiting for Pixelforge…"; if it gives up: "Pixelforge is too busy right now. You weren't charged." |
 | `concurrency_limit_exceeded` 429 | create | back to `waiting`, retry after 5 s | "Waiting for a free slot" |
 | `daily_limit_exceeded` 429 | create | `failed`, release hold | "Pixelforge's daily limit is reached. You weren't charged." |
 | `validation_failed` 422, `idempotency_key_reused` 409 | create | `failed`, release hold, log error (our bug) | "Something went wrong on our side. You weren't charged." |

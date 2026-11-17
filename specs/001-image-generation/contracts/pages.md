@@ -40,8 +40,8 @@ type SharedProps = {
   auth: { user: { id: number; name: string; email: string; is_admin: boolean } }
   balance: Money | null
   pixelforge_busy: boolean
-  flash: { success?: string; error?: string }
 }
+// Notices use the starter kit's flash: Inertia::flash('toast', { type, message }).
 ```
 
 ## `generations/Create`

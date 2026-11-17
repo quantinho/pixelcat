@@ -72,7 +72,8 @@ specs/001-image-generation/
 ├── contracts/
 │   ├── http.md
 │   ├── pages.md
-│   └── commands-and-jobs.md
+│   ├── commands-and-jobs.md
+│   └── core-api.md
 ├── checklists/requirements.md
 └── tasks.md            # /speckit-tasks
 ```
