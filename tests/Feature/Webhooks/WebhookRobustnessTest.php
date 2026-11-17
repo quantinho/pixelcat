@@ -14,6 +14,7 @@ use App\Models\WebhookDelivery;
 use App\Models\WebhookEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 use Tests\Support\FakePixelforge;
 
 /**
@@ -28,7 +29,7 @@ beforeEach(function () {
     app(Ledger::class)->hold($this->generation, 500_000_000);
 });
 
-function postWebhook(array $webhook): Illuminate\Testing\TestResponse
+function postWebhook(array $webhook): TestResponse
 {
     return test()->call('POST', '/webhooks/pixelforge', server: $webhook['server'], content: $webhook['body']);
 }

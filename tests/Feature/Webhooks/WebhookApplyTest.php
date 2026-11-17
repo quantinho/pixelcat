@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEvent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 use Tests\Support\FakePixelforge;
 
 /**
@@ -29,7 +30,7 @@ beforeEach(function () {
     $this->ledger->hold($this->generation, 500_000_000);
 });
 
-function postWebhookForApply(array $webhook): Illuminate\Testing\TestResponse
+function postWebhookForApply(array $webhook): TestResponse
 {
     return test()->call('POST', '/webhooks/pixelforge', server: $webhook['server'], content: $webhook['body']);
 }
