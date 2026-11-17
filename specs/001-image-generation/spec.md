@@ -242,7 +242,9 @@ balance after each step.
     update arrived, and reschedules itself with backoff (2, 4, 8, then every 15 minutes) until the
     generation is final;
   - at most one submit job and one sync job run per generation at a time; syncs respect a
-    request budget that leaves room for new submissions.
+    request budget that leaves room for new submissions;
+  - no job is delayed by more than 15 minutes (the SQS limit); a job whose due time is further
+    away re-dispatches itself with the remaining delay instead of acting early.
   An hourly sweep is the safety net: it dispatches waiting generations, re-dispatches stuck
   `submitting` ones (same Idempotency-Key), syncs `queued`/`processing` ones with no update for
   over 15 minutes, and fails generations that waited too long.

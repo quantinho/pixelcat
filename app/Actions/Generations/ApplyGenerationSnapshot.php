@@ -37,12 +37,12 @@ final class ApplyGenerationSnapshot
      */
     public function __invoke(Generation $generation, GenerationSnapshot $snapshot, string $source): DeliveryOutcome
     {
-        $wasAccepted = false;
+        $wasAlreadyWithPixelforge = false;
 
-        $outcome = DB::transaction(function () use ($generation, $snapshot, $source, &$wasAccepted) {
+        $outcome = DB::transaction(function () use ($generation, $snapshot, $source, &$wasAlreadyWithPixelforge) {
             $locked = Generation::query()->whereKey($generation->id)->lockForUpdate()->firstOrFail();
 
-            $wasAccepted = $locked->status->rank() >= GenerationStatus::Queued->rank();
+            $wasAlreadyWithPixelforge = $locked->status->rank() >= GenerationStatus::Queued->rank();
 
             $this->fillMissingData($locked, $snapshot);
 
@@ -59,7 +59,7 @@ final class ApplyGenerationSnapshot
         });
 
         // Pixelforge has it now and no result yet: the sync slice schedules a follow-up.
-        if ($outcome === DeliveryOutcome::Applied && ! $wasAccepted && ! $generation->status->isFinal()) {
+        if ($outcome === DeliveryOutcome::Applied && ! $wasAlreadyWithPixelforge && ! $generation->status->isFinal()) {
             GenerationAccepted::dispatch($generation);
         }
 

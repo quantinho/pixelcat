@@ -38,8 +38,9 @@ Each entry: decision, rationale, alternatives considered.
   `QUEUE_CONNECTION=cloud`, requires `aws/aws-sdk-php` and Laravel ≥ 13.19). Local and CI use
   the `database` driver. Jobs are idempotent because delivery is at least once.
 - **Rationale**: Managed queues are Cloud's recommended option, scale to zero and cost cents.
-  Per-job delays up to 15 minutes cover all our `Retry-After` and backoff values; jobs finish
-  far below the 90-second Flex limit.
+  Per-job delays are capped at 15 minutes by SQS: every delay is clamped to that, and a job
+  whose due time is further away re-dispatches itself with the rest. Jobs finish far below the
+  90-second Flex limit.
 - **Alternatives**: `queue:work` as a background process on the app cluster (stops when the app
   sleeps); worker clusters (Growth plan).
 - **Source**: https://laravel.com/cloud/docs/queues
