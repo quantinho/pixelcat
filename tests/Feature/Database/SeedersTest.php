@@ -78,12 +78,13 @@ it('refuses to run without passwords', function (string $missing) {
     expect(User::query()->count())->toBe(0);
 })->with(['ADMIN_PASSWORD', 'DEMO_USER_PASSWORD']);
 
-it('seeds fake generations in every state outside production', function () {
+it('seeds only finished fake generations outside production', function () {
     $this->seed(DatabaseSeeder::class);
 
     $statuses = Generation::query()->distinct()->pluck('status')->map->value->sort()->values()->all();
 
-    expect($statuses)->toBe(['failed', 'processing', 'queued', 'submitting', 'succeeded', 'waiting'])
+    // Unfinished fixtures would hold slots Pixelforge never released, blocking real submissions.
+    expect($statuses)->toBe(['failed', 'succeeded'])
         ->and(Generation::query()->where('is_anomaly', true)->count())->toBeGreaterThan(0)
         ->and(Generation::query()->where('status', GenerationStatus::Succeeded)
             ->where('completed_at', '<', now()->startOfDay())->count())->toBeGreaterThan(0);
@@ -96,7 +97,6 @@ it('writes the ledger entries each seeded generation would have', function () {
         $expected = match (true) {
             $generation->status === GenerationStatus::Succeeded => ['hold', 'charge', 'hold_release'],
             $generation->status === GenerationStatus::Failed => ['hold', 'hold_release'],
-            default => ['hold'],
         };
 
         expect(seededEntryTypes($generation))->toBe($expected, "Generation in {$generation->status->value}");

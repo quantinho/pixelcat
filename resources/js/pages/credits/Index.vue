@@ -27,7 +27,12 @@ const entryLabels: Record<string, string> = {
 
 // Users see times in their browser's time zone (spec Assumptions).
 function localTime(iso: string | null): string {
-    return iso ? new Date(iso).toLocaleString() : '';
+    return iso
+        ? new Date(iso).toLocaleString([], {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+          })
+        : '';
 }
 </script>
 
@@ -103,7 +108,10 @@ function localTime(iso: string | null): string {
                             <th scope="col" class="px-4 py-2 font-medium">
                                 What
                             </th>
-                            <th scope="col" class="px-4 py-2 font-medium">
+                            <th
+                                scope="col"
+                                class="hidden px-4 py-2 font-medium sm:table-cell"
+                            >
                                 Type
                             </th>
                             <th
@@ -124,10 +132,12 @@ function localTime(iso: string | null): string {
                                 {{ localTime(entry.at) }}
                             </td>
                             <td class="px-4 py-2">{{ entry.description }}</td>
-                            <td class="px-4 py-2 text-muted-foreground">
+                            <td
+                                class="hidden px-4 py-2 text-muted-foreground sm:table-cell"
+                            >
                                 {{ entryLabels[entry.type] ?? entry.type }}
                             </td>
-                            <td class="px-4 py-2 text-right">
+                            <td class="px-4 py-2 text-right whitespace-nowrap">
                                 <MoneyText :money="entry.amount" />
                             </td>
                         </tr>

@@ -94,7 +94,7 @@ final class ApplyGenerationSnapshot
         $this->recordCost($generation, $snapshot);
         $charged = $this->calculateCost->userPrice((int) $generation->provider_cost);
         $generation->charged = $charged;
-        $generation->completed_at = $snapshot->completedAt;
+        $generation->completed_at = $snapshot->completedAt ?? now(); // billed on this UTC day
         $generation->save();
 
         $held = $this->ledger->held($generation);
@@ -116,7 +116,7 @@ final class ApplyGenerationSnapshot
     {
         $generation->error_code = $snapshot->errorCode ?? 'generation_failed';
         $generation->error_message = $snapshot->errorMessage;
-        $generation->completed_at = $snapshot->completedAt;
+        $generation->completed_at = $snapshot->completedAt ?? now(); // billed on this UTC day
         $generation->save();
 
         $this->ledger->release($generation);
@@ -135,7 +135,7 @@ final class ApplyGenerationSnapshot
             && $snapshot->status === GenerationStatus::Succeeded
             && ! $generation->is_anomaly) {
             $this->recordCost($generation, $snapshot);
-            $generation->completed_at = $snapshot->completedAt;
+            $generation->completed_at = $snapshot->completedAt ?? now(); // billed on this UTC day
             $generation->is_anomaly = true;
             $generation->recordEvent('anomaly', 'Pixelforge reported success after this generation had failed. You weren\'t charged.', ['source' => $source]);
 

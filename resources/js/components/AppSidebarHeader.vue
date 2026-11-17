@@ -24,13 +24,17 @@ const page = usePage();
     >
         <div class="flex items-center gap-2">
             <SidebarTrigger class="-ml-1" />
-            <template v-if="breadcrumbs && breadcrumbs.length > 0">
+            <!-- Hidden on phones, where the page's own heading names it and space is short. -->
+            <div
+                v-if="breadcrumbs && breadcrumbs.length > 0"
+                class="hidden sm:block"
+            >
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
-            </template>
+            </div>
         </div>
         <div
             v-if="page.props.balance"
-            class="ml-auto flex items-center gap-3 text-sm"
+            class="ml-auto flex shrink-0 items-center gap-3 text-sm whitespace-nowrap"
         >
             <span>
                 <span class="text-muted-foreground">Balance</span>

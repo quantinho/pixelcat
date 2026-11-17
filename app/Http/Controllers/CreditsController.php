@@ -4,13 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Billing\Ledger;
 use App\Billing\Money;
+use App\Enums\LedgerEntryType;
 use App\Http\Resources\MoneyResource;
 use App\Models\LedgerEntry;
 use App\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,7 +54,28 @@ class CreditsController extends Controller
         ]);
 
         $dollars = $request->integer('pack');
-        $ledger->purchase($user, $dollars * Money::NANOS_PER_DOLLAR);
+        $amount = $dollars * Money::NANOS_PER_DOLLAR;
+
+        DB::transaction(function () use ($user, $ledger, $amount) {
+            $ledger->lockUser($user);
+
+            // Credits are free here, so a cap keeps anyone from minting a balance that would
+            // let them use up the shared Pixelforge account.
+            $cap = (int) config('pixelcat.daily_purchase_cap') * Money::NANOS_PER_DOLLAR;
+            $addedToday = (int) LedgerEntry::query()
+                ->where('user_id', $user->id)
+                ->where('type', LedgerEntryType::Purchase)
+                ->where('created_at', '>=', now('UTC')->startOfDay())
+                ->sum('amount');
+
+            if ($addedToday + $amount > $cap) {
+                throw ValidationException::withMessages([
+                    'pack' => 'You can add up to '.Money::displayCents($cap).' of demo credits a day. Try a smaller pack or come back tomorrow.',
+                ]);
+            }
+
+            $ledger->purchase($user, $amount);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Added '.self::dollars($dollars).' of credits']);
 

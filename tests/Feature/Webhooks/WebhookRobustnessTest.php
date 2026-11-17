@@ -14,6 +14,7 @@ use App\Models\WebhookDelivery;
 use App\Models\WebhookEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\FakePixelforge;
 
@@ -85,6 +86,33 @@ describe('signature', function () {
         postWebhook($webhook)->assertStatus(400);
 
         expect(WebhookDelivery::query()->sole()->outcome)->toBe(DeliveryOutcome::Rejected);
+    });
+
+    it('stops storing rejected posts after 100 in an hour, but still rejects them', function () {
+        WebhookDelivery::query()->insert(array_fill(0, 100, [
+            'signature_valid' => false,
+            'outcome' => DeliveryOutcome::Rejected->value,
+            'headers' => '{}',
+            'received_at' => now()->subMinutes(30),
+        ]));
+        $webhook = FakePixelforge::webhookFor(FakePixelforge::generationFor($this->generation, 'succeeded'), ['secret' => 'whsec_someoneelse']);
+
+        postWebhook($webhook)->assertStatus(400);
+
+        expect(WebhookDelivery::query()->count())->toBe(100);
+    });
+
+    it('keeps processing signed deliveries while rejected ones are not stored', function () {
+        WebhookDelivery::query()->insert(array_fill(0, 100, [
+            'signature_valid' => false,
+            'outcome' => DeliveryOutcome::Rejected->value,
+            'headers' => '{}',
+            'received_at' => now()->subMinutes(30),
+        ]));
+
+        postWebhook(FakePixelforge::webhookFor(FakePixelforge::generationFor($this->generation, 'succeeded')))->assertNoContent();
+
+        expect(chargesOf($this->generation))->toBe(1);
     });
 
     it('rejects a body that was changed after signing', function () {
@@ -223,4 +251,25 @@ it('answers 500 when applying fails, keeps the delivery, and applies the redeliv
         ->and(chargesOf($this->generation))->toBe(1)
         ->and(WebhookDelivery::query()->orderBy('id')->pluck('outcome')->all())
         ->toBe([DeliveryOutcome::Error, DeliveryOutcome::Applied]);
+});
+
+it('never charges a generation named by local_id when its Pixelforge id is different', function () {
+    Log::spy();
+    $other = Generation::factory()->for($this->user)->processing()->create();
+    $object = FakePixelforge::generationFor($other, 'succeeded', ['metadata' => ['local_id' => $this->generation->id]]);
+
+    postWebhook(FakePixelforge::webhookFor($object))->assertNoContent();
+
+    expect(chargesOf($this->generation))->toBe(0)
+        ->and($this->generation->fresh()->status)->toBe(GenerationStatus::Processing);
+    Log::shouldHaveReceived('critical')->withArgs(fn (string $message) => str_contains($message, 'different Pixelforge id'))->once();
+});
+
+it('prunes deliveries older than 30 days', function () {
+    $old = WebhookDelivery::query()->create(['signature_valid' => false, 'outcome' => DeliveryOutcome::Rejected, 'headers' => [], 'received_at' => now()->subDays(31)]);
+    $recent = WebhookDelivery::query()->create(['signature_valid' => false, 'outcome' => DeliveryOutcome::Rejected, 'headers' => [], 'received_at' => now()->subDays(29)]);
+
+    $this->artisan('model:prune', ['--model' => [WebhookDelivery::class]])->assertSuccessful();
+
+    expect(WebhookDelivery::query()->pluck('id')->all())->toBe([$recent->id]);
 });

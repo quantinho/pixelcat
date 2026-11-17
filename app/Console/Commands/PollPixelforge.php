@@ -12,6 +12,7 @@ use App\Pixelforge\PixelforgeRejected;
 use App\Pixelforge\PixelforgeUnavailable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * The hourly safety net behind the per-generation SyncGeneration jobs (spec FR-011): fetches
@@ -90,6 +91,12 @@ class PollPixelforge extends Command
             } catch (PixelforgeUnavailable $e) {
                 $this->recordAttempt($generation);
                 Log::warning('Pixelforge did not answer a poll request.', ['generation_id' => $generation->id, 'error' => $e->getMessage()]);
+            } catch (Throwable $e) {
+                // A snapshot we can't apply (no usage, a cost that isn't whole nanodollars) needs
+                // a human, but must not block the generations behind it in every run.
+                $this->recordAttempt($generation);
+                report($e);
+                Log::critical('Could not apply a polled Pixelforge snapshot.', ['generation_id' => $generation->id, 'error' => $e->getMessage()]);
             }
         }
 

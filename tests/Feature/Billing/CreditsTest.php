@@ -119,6 +119,19 @@ describe('credits page', function () {
     });
 });
 
+it('limits sign-ups per IP address, since each one gets free credit', function () {
+    config(['pixelcat.signups_per_ip_per_hour' => 2]);
+    $this->post(route('register.store'), registrationForm('one@example.com'));
+    auth()->logout();
+    $this->post(route('register.store'), registrationForm('two@example.com'));
+    auth()->logout();
+
+    $this->post(route('register.store'), registrationForm('three@example.com'))
+        ->assertSessionHasErrors(['email' => 'Too many accounts were created from your network. Try again in an hour.']);
+
+    expect(User::query()->count())->toBe(2);
+});
+
 describe('buying credits', function () {
     beforeEach(function () {
         $this->user = User::factory()->create();
@@ -150,6 +163,22 @@ describe('buying credits', function () {
         $this->actingAs($this->user)->post('/credits/purchase', ['pack' => 5]);
 
         expect(app(Ledger::class)->balance($this->user))->toBe(17_000_000_000);
+    });
+
+    it('caps free credits at $100.00 per UTC day', function () {
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 22:00:00', 'UTC'));
+        foreach (range(1, 4) as $i) {
+            $this->actingAs($this->user)->post('/credits/purchase', ['pack' => 25])->assertSessionHasNoErrors();
+        }
+
+        $this->actingAs($this->user)
+            ->post('/credits/purchase', ['pack' => 5])
+            ->assertSessionHasErrors(['pack' => 'You can add up to $100.00 of demo credits a day. Try a smaller pack or come back tomorrow.']);
+        expect(app(Ledger::class)->balance($this->user))->toBe(100_000_000_000);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-18 00:00:01', 'UTC'));
+        $this->actingAs($this->user)->post('/credits/purchase', ['pack' => 5])->assertSessionHasNoErrors();
+        expect(app(Ledger::class)->balance($this->user))->toBe(105_000_000_000);
     });
 
     it('refuses anything but the fixed packs', function (mixed $pack) {

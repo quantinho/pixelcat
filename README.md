@@ -11,6 +11,8 @@ Laravel 13, Inertia 3, Vue 3 + TypeScript, Tailwind 4, Postgres, Pest. Hosted on
 |---|---|---|
 | ![Generate page with a price estimate and its breakdown](docs/screenshots/generate.jpg) | ![History with generations waiting, queued and generating](docs/screenshots/history-live.jpg) | ![History with failed (not charged) and done generations](docs/screenshots/history-finished.jpg) |
 
+![Operator report: charged, provider cost and profit per UTC day and per user, with reconciliation status](docs/screenshots/admin-report.jpg)
+
 ## What it does
 
 - **Estimate before you pay.** The form shows a price range for the prompt, size and quality,
@@ -83,7 +85,9 @@ flowchart TD
   constraints fix the sign of each entry type, and a generation has at most one hold, release
   and charge. Entries are deleted only with their user's account.
 - Daily reconciliation (`pixelforge:reconcile`, 00:15 UTC) compares recorded provider cost with
-  `GET /v1/usage` per day; the admin report shows `match` or the difference.
+  `GET /v1/usage` per day; the admin report shows `match` or the difference. To check the day in
+  progress (for example right after a deploy), `php artisan pixelforge:reconcile --today` also
+  shows today so far without storing it.
 
 The reasons behind these choices (nanodollars, rounding up, applying webhooks in the request,
 slot fairness, the ambiguity rule and more) are in [DECISIONS.md](DECISIONS.md). The full spec,

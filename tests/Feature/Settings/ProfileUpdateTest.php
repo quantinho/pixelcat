@@ -2,8 +2,13 @@
 
 namespace Tests\Feature\Settings;
 
+use App\Billing\Ledger;
+use App\Models\Generation;
+use App\Models\LedgerEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
@@ -119,7 +124,38 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect(route('home'));
 
         $this->assertGuest();
-        $this->assertNull($user->fresh());
+
+        // Anonymised, not deleted: the ledger and billed generations must stay (see DeleteAccount).
+        $deleted = $user->fresh();
+        $this->assertSame('Deleted user', $deleted->name);
+        $this->assertStringEndsWith('@users.pixelcat.invalid', $deleted->email);
+        $this->assertFalse(Auth::attempt(['email' => $user->email, 'password' => 'password']));
+    }
+
+    public function test_deleting_an_account_keeps_its_billing_history_but_not_its_content()
+    {
+        Storage::fake('images');
+        $user = User::factory()->create(['is_admin' => true]);
+        app(Ledger::class)->grant($user, 1_000_000_000, 'Welcome credit');
+        $generation = Generation::factory()->for($user)->succeeded()->create([
+            'prompt' => 'My private prompt',
+            'image_path' => 'private.png',
+        ]);
+        Storage::disk('images')->put('private.png', 'png');
+        $entries = LedgerEntry::query()->count();
+
+        $this->actingAs($user)
+            ->delete(route('profile.destroy'), ['password' => 'password'])
+            ->assertRedirect(route('home'));
+
+        $kept = $generation->fresh();
+        $this->assertSame($generation->provider_cost, $kept->provider_cost);
+        $this->assertSame($generation->charged, $kept->charged);
+        $this->assertSame('Deleted', $kept->prompt);
+        $this->assertNull($kept->image_path);
+        Storage::disk('images')->assertMissing('private.png');
+        $this->assertSame($entries, LedgerEntry::query()->count());
+        $this->assertFalse($user->fresh()->is_admin);
     }
 
     public function test_correct_password_must_be_provided_to_delete_account()

@@ -42,6 +42,31 @@ it('checks only completed UTC days, never today', function () {
         && $request['end_date'] === '2026-11-16');
 });
 
+it('shows today so far with --today without storing it', function () {
+    reconcileCompletedGeneration('2026-11-17 09:00:00', 373_875_000);
+    $this->pixelforge->withUsage(['2026-11-17' => ['generations' => 1, 'cost_usd' => '0.373875000']]);
+
+    $this->artisan('pixelforge:reconcile', ['--days' => 1, '--today' => true])
+        ->expectsOutputToContain('2026-11-17 (so far)')
+        ->assertSuccessful();
+
+    Http::assertSent(fn (Request $request) => str_contains($request->url(), '/usage')
+        && $request['start_date'] === '2026-11-16'
+        && $request['end_date'] === '2026-11-17');
+
+    expect(storedReconciliation('2026-11-17'))->toBeNull()
+        ->and(storedReconciliation('2026-11-16'))->not->toBeNull();
+});
+
+it('does not log a difference for today, which is still in progress', function () {
+    reconcileCompletedGeneration('2026-11-17 09:00:00', 373_875_000);
+    Log::spy();
+
+    $this->artisan('pixelforge:reconcile', ['--days' => 1, '--today' => true])->assertSuccessful();
+
+    Log::shouldNotHaveReceived('warning');
+});
+
 it('checks the last 7 completed days by default', function () {
     $this->artisan('pixelforge:reconcile')->assertSuccessful();
 

@@ -210,7 +210,7 @@ each step.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [x] T081 [P] Seeders: admin and demo users with passwords from `ADMIN_PASSWORD` and `DEMO_USER_PASSWORD`; fake generations in every state only outside production (FR-022) in database/seeders/
+- [x] T081 [P] Seeders: admin and demo users with passwords from `ADMIN_PASSWORD` and `DEMO_USER_PASSWORD`; fake finished generations only outside production (FR-022) in database/seeders/
 - [x] T082 [P] Implement `pixelcat:demo-generations` (real API, keyword prompts, normal flow) in app/Console/Commands/DemoGenerations.php
 - [x] T083 [P] Write README.md: what it does, screenshots, mermaid diagrams of the state machine and the money flow, local setup, tests, demo logins "sent with the application"
 - [x] T084 [P] Write DECISIONS.md: each open question, options and choice (nanodollars, rounding up, in-request webhook apply, fake Pixelforge, polling, slot fairness, ambiguity rule, talking points on Typesense, ClickHouse, ECS and WebSockets)

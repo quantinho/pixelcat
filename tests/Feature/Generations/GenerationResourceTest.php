@@ -160,3 +160,31 @@ describe('estimate_position', function () {
         expect(generationJson($generation)['estimate_position'])->toEqualWithDelta(0.5, 1e-9);
     });
 });
+
+describe('image', function () {
+    it('points at the stored-image route when a copy is stored, even after the Pixelforge URL expired', function () {
+        $generation = Generation::factory()->for($this->user)->succeeded()->create([
+            'image_path' => 'copy.png',
+            'image_url' => 'https://cdn.pixelforge.test/images/gen_1.png?sig=abc',
+            'image_url_expires_at' => now()->subHour(),
+        ]);
+
+        expect(generationJson($generation))->toMatchArray([
+            'image_src' => route('generations.image', $generation, absolute: false),
+            'image_expired' => false,
+        ]);
+    });
+
+    it('has no image and says it expired when there is no copy and the Pixelforge URL expired', function () {
+        $generation = Generation::factory()->for($this->user)->succeeded()->create([
+            'image_path' => null,
+            'image_url' => 'https://cdn.pixelforge.test/images/gen_1.png?sig=abc',
+            'image_url_expires_at' => now()->subSecond(),
+        ]);
+
+        expect(generationJson($generation))->toMatchArray([
+            'image_src' => null,
+            'image_expired' => true,
+        ]);
+    });
+});

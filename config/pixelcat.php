@@ -21,4 +21,10 @@ return [
     // Fake "Buy credits" packs, in whole dollars.
     'credit_packs' => [5, 10, 25],
 
+    // Credits are free, so cap them: whole dollars a user may add per UTC day.
+    'daily_purchase_cap' => (int) env('PIXELCAT_DAILY_PURCHASE_CAP', 100),
+
+    // Every sign-up gets the welcome credit, so limit sign-ups per IP address per hour.
+    'signups_per_ip_per_hour' => (int) env('PIXELCAT_SIGNUPS_PER_IP_PER_HOUR', 5),
+
 ];

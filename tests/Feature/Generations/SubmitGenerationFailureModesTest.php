@@ -3,8 +3,10 @@
 use App\Actions\Generations\DispatchWaitingGenerations;
 use App\Billing\Ledger;
 use App\Enums\GenerationStatus;
+use App\Enums\LedgerEntryType;
 use App\Events\GenerationAccepted;
 use App\Events\GenerationFinished;
+use App\Events\GenerationSucceeded;
 use App\Http\Resources\GenerationResource;
 use App\Jobs\DispatchWaiting;
 use App\Jobs\SubmitGenerationToPixelforge;
@@ -129,8 +131,10 @@ it('gives up on an overload after 5 attempts, without a charge', function () {
     $generation->refresh();
     expect($generation->status)->toBe(GenerationStatus::Failed)
         ->and($generation->error_code)->toBe('overloaded')
+        ->and($generation->charged)->toBeNull()
         ->and(GenerationResource::errorMessage('overloaded'))->toBe("Pixelforge is too busy right now. You weren't charged.")
-        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release']);
+        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release'])
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000);
 });
 
 it('retries a rate limit after Retry-After and gives up after 5 attempts', function () {
@@ -143,7 +147,10 @@ it('retries a rate limit after Retry-After and gives up after 5 attempts', funct
     ($this->run)($generation, 5)->assertNotReleased();
     expect($generation->fresh())
         ->status->toBe(GenerationStatus::Failed)
-        ->error_code->toBe('rate_limit_exceeded');
+        ->error_code->toBe('rate_limit_exceeded')
+        ->charged->toBeNull()
+        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release'])
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000);
 });
 
 it('never delays a retry by more than 15 minutes', function () {
@@ -267,7 +274,8 @@ it('resolves an ambiguous attempt with a concurrency limit, so it can expire lat
 
     expect(app(DispatchWaitingGenerations::class)->failIfWaitedTooLong($generation))->toBeTrue()
         ->and($generation->fresh()->error_code)->toBe('waited_too_long')
-        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release']);
+        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release'])
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000);
 });
 
 it('keeps an ambiguous attempt unresolved on a rate limit and retries', function () {
@@ -308,6 +316,45 @@ it('gets the same Pixelforge generation back after a timeout that created it', f
         ->and($generation->had_ambiguous_attempt)->toBeTrue()
         ->and($generation->submit_attempts)->toBe(3)
         ->and($this->pixelforge->createCalls())->toBe(2);
+});
+
+it('charges once when the idempotent replay is already final, and ignores the later webhook', function () {
+    Event::fake([GenerationAccepted::class, GenerationSucceeded::class, GenerationFinished::class]);
+    $generation = ($this->submitting)();
+    $this->pixelforge->createReturns(FakePixelforge::TIMEOUT_AFTER_CREATE);
+    $charges = fn () => LedgerEntry::query()
+        ->where('generation_id', $generation->id)->where('type', LedgerEntryType::Charge);
+
+    // Pixelforge created it, but the response was lost.
+    ($this->run)($generation, 1)->assertReleased(5);
+    $created = $this->pixelforge->storedFor($generation->id);
+
+    // Pixelforge finishes it before our retry, so the retry's 202 replay carries succeeded.
+    $succeeded = $this->pixelforge->advance($created['id'], 'succeeded');
+    ($this->run)($generation, 2)->assertNotReleased();
+
+    $generation->refresh();
+    expect($this->pixelforge->createCalls())->toBe(2)
+        ->and($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->pixelforge_id)->toBe($created['id'])
+        ->and($generation->provider_cost)->toBe(FakePixelforge::WORKED_EXAMPLE_PROVIDER_COST)
+        ->and($generation->charged)->toBe(FakePixelforge::WORKED_EXAMPLE_USER_PRICE)
+        ->and(($this->ledgerTypes)($generation))->toEqualCanonicalizing(['hold', 'hold_release', 'charge'])
+        ->and($charges()->count())->toBe(1)
+        ->and((int) $charges()->sum('amount'))->toBe(-FakePixelforge::WORKED_EXAMPLE_USER_PRICE)
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000 - FakePixelforge::WORKED_EXAMPLE_USER_PRICE);
+
+    // The succeeded webhook for the same generation arrives later: a no-op.
+    $webhook = FakePixelforge::webhookFor($succeeded);
+    $this->call('POST', '/webhooks/pixelforge', server: $webhook['server'], content: $webhook['body'])->assertSuccessful();
+
+    $generation->refresh();
+    expect($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->charged)->toBe(FakePixelforge::WORKED_EXAMPLE_USER_PRICE)
+        ->and($charges()->count())->toBe(1)
+        ->and(($this->ledgerTypes)($generation))->toEqualCanonicalizing(['hold', 'hold_release', 'charge'])
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000 - FakePixelforge::WORKED_EXAMPLE_USER_PRICE);
+    Event::assertDispatchedTimes(GenerationSucceeded::class, 1);
 });
 
 it('replays the same Pixelforge generation when the job crashed after acceptance', function () {

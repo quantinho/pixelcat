@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 
 /**
- * Fake generations in every state, for local development and review only; never run in
+ * Fake finished generations (done, failed and an anomaly), for local development and review only; never run in
  * production. Each one gets the ledger entries the real flow would write (hold, then
  * charge and release, or release only), so balances stay consistent.
  *
@@ -65,13 +65,9 @@ class DemoGenerationsSeeder extends Seeder
             // Pixelforge finished it after we had given up waiting: we pay, the user doesn't.
             $this->anomaly($demo, $today->subDay()->setTime(22, 50));
 
-            foreach (['waiting', 'submitting', 'queued', 'processing'] as $state) {
-                $generation = Generation::factory()->for($demo)->{$state}()->create([
-                    'prompt' => "A sleepy cat in a teacup, still {$state}",
-                    'created_at' => $today->subMinutes(2),
-                ]);
-                $this->ledger->hold($generation, $generation->estimate_max);
-            }
+            // No fixtures in waiting, submitting, queued or processing: Pixelforge has never
+            // heard of them, so they would hold the demo user's slots forever and every real
+            // submission would wait. Submit a prompt to see those states; the fake finishes it.
         });
     }
 

@@ -200,6 +200,19 @@ describe('SyncGeneration', function () {
             && $next->firstScheduledAt?->equalTo($first));
     });
 
+    it('keeps watching when a snapshot cannot be applied', function () {
+        Log::spy();
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $this->pixelforge->store(FakePixelforge::generationFor($generation, 'succeeded', ['usage' => null]));
+
+        runSync(new SyncGeneration($generation->id, 0, now()));
+
+        expect($generation->fresh()->status)->toBe(GenerationStatus::Processing)
+            ->and($generation->ledgerEntries()->where('type', LedgerEntryType::Charge)->count())->toBe(0);
+        Queue::assertPushed(SyncGeneration::class, fn (SyncGeneration $next) => $next->step === 1);
+        Log::shouldHaveReceived('critical')->once();
+    });
+
     it('leaves the state unchanged and tries later when Pixelforge errs', function (string $outcome, bool $critical) {
         Log::spy();
         $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
@@ -301,6 +314,22 @@ describe('pixelforge:poll', function () {
         $this->artisan('pixelforge:poll')->assertSuccessful();
 
         expect($generation->fresh()->last_synced_at->equalTo(now()->subMinutes(20)))->toBeTrue();
+    });
+
+    it('moves on past a snapshot it cannot apply, which goes to the back of the line', function () {
+        Log::spy();
+        $broken = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $this->pixelforge->store(FakePixelforge::generationFor($broken, 'succeeded', ['usage' => null]));
+        $broken->update(['last_synced_at' => now()->subHours(2)]);
+        $healthy = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $healthy->update(['last_synced_at' => now()->subMinutes(20)]);
+
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+
+        expect($healthy->fresh()->status)->toBe(GenerationStatus::Succeeded)
+            ->and($broken->fresh()->status)->toBe(GenerationStatus::Processing)
+            ->and($broken->fresh()->last_synced_at->equalTo(now()))->toBeTrue();
+        Log::shouldHaveReceived('critical')->once();
     });
 
     it('reaches a healthy generation behind 10 permanently broken ones', function () {

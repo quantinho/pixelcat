@@ -82,6 +82,16 @@ describe('display', function () {
     ]);
 });
 
+describe('displayCents', function () {
+    it('rounds half-up to 2 decimals for round amounts in copy', function (int $nanos, string $display) {
+        expect(Money::displayCents($nanos))->toBe($display);
+    })->with([
+        'welcome credit' => [2_000_000_000, '$2.00'],
+        'half a cent rounds up' => [5_000_000, '$0.01'],
+        'negative' => [-10_000_000, '-$0.01'],
+    ]);
+});
+
 describe('perTokenNanos', function () {
     it('converts a rate per 1M tokens to nanodollars per token', function (string $rate, int $nanos) {
         expect(Money::perTokenNanos($rate))->toBe($nanos);

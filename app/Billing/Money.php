@@ -54,6 +54,17 @@ final class Money
     }
 
     /**
+     * Format a round amount for copy, e.g. the welcome credit: "$2.00". Never for prices,
+     * which use display() or the exact value.
+     */
+    public static function displayCents(int $nanos): string
+    {
+        $rounded = BigDecimal::ofUnscaledValue(abs($nanos), 9)->toScale(2, RoundingMode::HalfUp);
+
+        return ($nanos < 0 ? '-$' : '$').$rounded;
+    }
+
+    /**
      * Price of one token in nanodollars for a rate quoted in USD per 1M tokens,
      * e.g. "12.50" → 12_500. Throws if a single token is not a whole nanodollar.
      *

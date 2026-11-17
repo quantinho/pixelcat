@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\DeliveryOutcome;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -23,9 +25,22 @@ use Illuminate\Support\Carbon;
  */
 class WebhookDelivery extends Model
 {
+    use MassPrunable;
+
     public $timestamps = false;
 
     protected $guarded = [];
+
+    /**
+     * A debugging log, not a record of money (that is webhook_events and the ledger), so it
+     * is kept for 30 days by the daily model:prune.
+     *
+     * @return Builder<self>
+     */
+    public function prunable(): Builder
+    {
+        return self::query()->where('received_at', '<', now()->subDays(30));
+    }
 
     protected function casts(): array
     {
