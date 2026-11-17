@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\EstimateController;
 use App\Http\Controllers\GenerationController;
+use App\Http\Controllers\GenerationHistoryController;
 use Illuminate\Support\Facades\Route;
 
 // Middleware `web` and `auth` come from bootstrap/app.php; see contracts/http.md.
@@ -12,3 +13,4 @@ Route::post('generations/estimate', EstimateController::class)
     ->middleware('throttle:60,1')
     ->name('generations.estimate');
 Route::post('generations', [GenerationController::class, 'store'])->name('generations.store');
+Route::get('generations', [GenerationHistoryController::class, 'index'])->name('generations.index');
