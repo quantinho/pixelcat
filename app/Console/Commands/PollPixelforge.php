@@ -57,6 +57,10 @@ class PollPixelforge extends Command
             } catch (PixelforgeRejected $e) {
                 $context = ['generation_id' => $generation->id, 'pixelforge_id' => $generation->pixelforge_id, 'error_code' => $e->errorCode];
 
+                if ($e->errorCode === 'not_found') {
+                    $this->recordAttempt($generation);
+                }
+
                 if (in_array($e->errorCode, ['invalid_api_key', 'not_found'], true)) {
                     Log::critical('Pixelforge refused to show a generation.', $context);
                 } else {
@@ -68,6 +72,7 @@ class PollPixelforge extends Command
                     break;
                 }
             } catch (PixelforgeUnavailable $e) {
+                $this->recordAttempt($generation);
                 Log::warning('Pixelforge did not answer a poll request.', ['generation_id' => $generation->id, 'error' => $e->getMessage()]);
             }
         }
@@ -75,5 +80,16 @@ class PollPixelforge extends Command
         $this->info("Synced {$synced} of {$stale->count()} stale generations.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * last_synced_at means "last time we tried to sync". A fetch that failed because of this
+     * generation (unknown to Pixelforge, no answer) still counts, so it moves to the back of
+     * the line and a few broken generations can't take every run's 10 places forever.
+     * Failures that say nothing about the generation (bad key, rate limit) don't count.
+     */
+    private function recordAttempt(Generation $generation): void
+    {
+        Generation::query()->whereKey($generation->id)->update(['last_synced_at' => now()]);
     }
 }

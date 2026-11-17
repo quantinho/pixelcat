@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Log;
  * the next check, until the generation is final.
  *
  * Checks are 2, 4, 8 and then every 15 minutes apart; no delay exceeds the 15-minute SQS limit.
+ * After 24 hours the chain stops (an idle app must let the database sleep); the hourly
+ * pixelforge:poll sweep keeps trying from there.
  */
 class SyncGeneration implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -36,18 +38,23 @@ class SyncGeneration implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public int $uniqueFor = 16 * 60;
 
+    /** Stop checking this long after Pixelforge accepted the generation. */
+    public const GIVE_UP_AFTER_HOURS = 24;
+
     public function __construct(
         public string $generationId,
         public int $step,
         public CarbonImmutable $scheduledAt,
+        public ?CarbonImmutable $firstScheduledAt = null,
     ) {}
 
     /**
      * Schedule check number $step (0 = the first, 2 minutes from now).
      */
-    public static function schedule(string $generationId, int $step = 0): PendingDispatch
+    public static function schedule(string $generationId, int $step = 0, ?CarbonImmutable $firstScheduledAt = null): PendingDispatch
     {
-        $job = new self($generationId, $step, CarbonImmutable::now());
+        $now = CarbonImmutable::now();
+        $job = new self($generationId, $step, $now, $firstScheduledAt ?? $now);
 
         return dispatch($job)->delay($job->delayMinutes() * 60);
     }
@@ -91,7 +98,39 @@ class SyncGeneration implements ShouldBeUniqueUntilProcessing, ShouldQueue
             }
         }
 
-        self::schedule($this->generationId, $this->step + 1);
+        if ($this->pastCeiling($generation)) {
+            $this->giveUp($generation);
+
+            return;
+        }
+
+        self::schedule($this->generationId, $this->step + 1, $this->firstScheduledAt ?? $this->scheduledAt);
+    }
+
+    /**
+     * 24 hours after Pixelforge created the generation, or after our first check when
+     * Pixelforge never told us when that was.
+     */
+    private function pastCeiling(Generation $generation): bool
+    {
+        $start = $generation->provider_created_at !== null
+            ? CarbonImmutable::instance($generation->provider_created_at)
+            : ($this->firstScheduledAt ?? $this->scheduledAt);
+
+        return CarbonImmutable::now()->greaterThanOrEqualTo($start->addHours(self::GIVE_UP_AFTER_HOURS));
+    }
+
+    private function giveUp(Generation $generation): void
+    {
+        $generation->recordEvent('sync_stopped', 'Still waiting for Pixelforge after a day. We keep checking hourly.', [
+            'status' => $generation->status->value,
+        ]);
+
+        Log::critical('Stopped syncing a generation that is not final after 24 hours; the hourly sweep keeps trying.', [
+            'generation_id' => $generation->id,
+            'pixelforge_id' => $generation->pixelforge_id,
+            'status' => $generation->status->value,
+        ]);
     }
 
     private function updatedSinceScheduled(Generation $generation): bool

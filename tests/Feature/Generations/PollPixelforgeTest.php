@@ -161,6 +161,44 @@ describe('SyncGeneration', function () {
         Queue::assertPushed(SyncGeneration::class, fn (SyncGeneration $next) => $next->step === 1);
     });
 
+    it('gives up after 24 hours at Pixelforge and leaves the rest to the hourly sweep', function () {
+        Log::spy();
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'processing');
+        $generation->update(['provider_created_at' => now()->subHours(24)->subMinutes(10)]);
+
+        runSync(new SyncGeneration($generation->id, 99, now()));
+
+        Http::assertSentCount(1);
+        Queue::assertNothingPushed();
+        expect($generation->fresh()->status)->toBe(GenerationStatus::Processing)
+            ->and($generation->events()->where('type', 'sync_stopped')->count())->toBe(1);
+        Log::shouldHaveReceived('critical')->once();
+    });
+
+    it('counts the 24 hours from its first check when Pixelforge sent no creation time', function () {
+        Log::spy();
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'processing');
+        $generation->update(['provider_created_at' => null]);
+        $this->pixelforge->store(FakePixelforge::generationFor($generation, 'processing', ['created_at' => null]));
+
+        runSync(new SyncGeneration($generation->id, 99, now(), firstScheduledAt: now()->subHours(25)));
+
+        Queue::assertNothingPushed();
+        expect($generation->events()->where('type', 'sync_stopped')->count())->toBe(1);
+        Log::shouldHaveReceived('critical')->once();
+    });
+
+    it('carries its first check time along while it keeps watching', function () {
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'processing');
+        $generation->update(['provider_created_at' => null]);
+        $first = now()->subHours(3);
+
+        runSync(new SyncGeneration($generation->id, 5, now(), firstScheduledAt: $first));
+
+        Queue::assertPushed(SyncGeneration::class, fn (SyncGeneration $next) => $next->step === 6
+            && $next->firstScheduledAt?->equalTo($first));
+    });
+
     it('leaves the state unchanged and tries later when Pixelforge errs', function (string $outcome, bool $critical) {
         Log::spy();
         $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
@@ -239,10 +277,48 @@ describe('pixelforge:poll', function () {
 
         $this->artisan('pixelforge:poll')->assertSuccessful();
 
-        expect($generation->fresh()->status)->toBe(GenerationStatus::Processing)
-            ->and($generation->fresh()->last_synced_at->equalTo(now()->subMinutes(20)))->toBeTrue();
+        expect($generation->fresh()->status)->toBe(GenerationStatus::Processing);
         Log::shouldHaveReceived('critical')->once();
     })->with(['invalid_api_key', 'not_found']);
+
+    it('records a failed attempt so the generation goes to the back of the line', function (string $outcome) {
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $generation->update(['last_synced_at' => now()->subMinutes(20)]);
+        $this->pixelforge->getReturns($outcome);
+
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+
+        expect($generation->fresh()->status)->toBe(GenerationStatus::Processing)
+            ->and($generation->fresh()->last_synced_at->equalTo(now()))->toBeTrue();
+    })->with(['not_found' => 'not_found', 'timeout' => FakePixelforge::TIMEOUT, 'server error' => FakePixelforge::SERVER_ERROR]);
+
+    it('does not record an attempt when our key or budget is the problem', function () {
+        $generation = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $generation->update(['last_synced_at' => now()->subMinutes(20)]);
+        $this->pixelforge->getReturns('invalid_api_key');
+
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+
+        expect($generation->fresh()->last_synced_at->equalTo(now()->subMinutes(20)))->toBeTrue();
+    });
+
+    it('reaches a healthy generation behind 10 permanently broken ones', function () {
+        Log::spy();
+        foreach (range(1, 10) as $i) {
+            // Pixelforge doesn't know these (not_found on every fetch).
+            Generation::factory()->for($this->user)->processing()->create(['last_synced_at' => now()->subHours(2)]);
+        }
+        $healthy = generationAtPixelforge($this->pixelforge, $this->user, 'processing', 'succeeded');
+        $healthy->update(['last_synced_at' => now()->subMinutes(20)]);
+
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+        expect($healthy->fresh()->status)->toBe(GenerationStatus::Processing);
+
+        $this->travel(1)->hours();
+        $this->artisan('pixelforge:poll')->assertSuccessful();
+
+        expect($healthy->fresh()->status)->toBe(GenerationStatus::Succeeded);
+    });
 
     it('re-dispatches generations stuck in submitting with the same Idempotency-Key')
         ->todo('needs SubmitGenerationToPixelforge from the Submission slice; see the report');
