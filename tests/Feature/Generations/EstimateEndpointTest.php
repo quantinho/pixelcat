@@ -3,6 +3,9 @@
 use App\Billing\Ledger;
 use App\Models\User;
 use App\Pixelforge\PixelforgeClient;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Tests\Support\FakePixelforge;
 
 /**
@@ -100,6 +103,37 @@ it('rejects invalid input with 422', function (array $input, string $field) {
     'not a url' => [['reference_images' => ['not a url']], 'reference_images.0'],
     'ftp url' => [['reference_images' => ['ftp://example.com/a.png']], 'reference_images.0'],
 ]);
+
+it('answers 503 with a clear message when Pixelforge pricing is unreachable', function (Closure $response) {
+    Cache::flush();
+    Http::swap(new Factory); // drop the fake Pixelforge
+    Http::preventStrayRequests();
+    Http::fake(fn () => $response());
+
+    ($this->estimate)()
+        ->assertStatus(503)
+        ->assertExactJson(['message' => 'Pixelforge is unreachable right now. Try again in a moment.']);
+})->with([
+    'timeout' => fn () => fn () => Factory::failedConnection('cURL error 28: Operation timed out'),
+    'overloaded' => fn () => fn () => Http::response(FakePixelforge::errorBody('overloaded'), 503, ['Retry-After' => '2']),
+]);
+
+it('allows 60 estimates per user per minute', function () {
+    foreach (range(1, 60) as $_) {
+        ($this->estimate)()->assertOk();
+    }
+
+    ($this->estimate)()->assertTooManyRequests();
+
+    // The limit is per user.
+    $other = User::factory()->create();
+    $this->actingAs($other)->postJson('/generations/estimate', [
+        'prompt' => 'x', 'size' => '1024x1024', 'quality' => 'medium',
+    ])->assertOk();
+
+    $this->travel(61)->seconds();
+    ($this->estimate)()->assertOk();
+});
 
 it('requires a signed-in user', function () {
     $this->postJson('/generations/estimate', ['prompt' => 'x'])->assertUnauthorized();

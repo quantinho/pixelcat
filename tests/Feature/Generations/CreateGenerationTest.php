@@ -10,6 +10,9 @@ use App\Models\LedgerEntry;
 use App\Models\User;
 use App\Pixelforge\PixelforgeClient;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
@@ -210,6 +213,24 @@ it('allows the 50th generation of the UTC day', function () {
 
     expect(Generation::query()->count())->toBe(50);
 });
+
+it('refuses with a clear message when Pixelforge pricing is unreachable', function (Closure $response) {
+    Cache::flush();
+    Http::swap(new Factory); // drop the fake Pixelforge
+    Http::preventStrayRequests();
+    Http::fake(fn () => $response());
+
+    ($this->submitJson)(($this->input)())
+        ->assertStatus(503)
+        ->assertJsonPath('errors.pixelforge_unavailable.0', 'Pixelforge is unreachable right now. Try again in a moment.');
+
+    expect(Generation::query()->count())->toBe(0)
+        ->and($this->ledger->balance($this->user))->toBe(2_000_000_000);
+    Queue::assertNothingPushed();
+})->with([
+    'timeout' => fn () => fn () => Factory::failedConnection('cURL error 28: Operation timed out'),
+    'overloaded' => fn () => fn () => Http::response(FakePixelforge::errorBody('overloaded'), 503, ['Retry-After' => '2']),
+]);
 
 it('validates the request like Pixelforge does', function (array $overrides, string $field) {
     ($this->submitJson)(($this->input)($overrides))

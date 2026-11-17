@@ -1,8 +1,10 @@
 <?php
 
+use App\Actions\Generations\DispatchWaitingGenerations;
 use App\Billing\Ledger;
 use App\Enums\GenerationStatus;
 use App\Events\GenerationAccepted;
+use App\Events\GenerationFinished;
 use App\Http\Resources\GenerationResource;
 use App\Jobs\DispatchWaiting;
 use App\Jobs\SubmitGenerationToPixelforge;
@@ -211,7 +213,7 @@ it('backs off ambiguous retries up to 10 minutes and never gives up', function (
     'attempt 50' => [50, 600],
 ]);
 
-it('never fails a generation after an ambiguous attempt', function (string $code) {
+it('never fails a generation after an ambiguous attempt while the answer leaves it unresolved', function (string $code) {
     Log::spy();
     $generation = ($this->submitting)(['had_ambiguous_attempt' => true]);
     $this->pixelforge->createReturns($code);
@@ -223,7 +225,62 @@ it('never fails a generation after an ambiguous attempt', function (string $code
         ->and($generation->error_code)->toBeNull()
         ->and(($this->ledgerTypes)($generation))->toBe(['hold']);
     Log::shouldHaveReceived('critical')->withArgs(fn (string $message, array $context) => $context['error_code'] === $code)->once();
-})->with(['content_policy_violation', 'daily_limit_exceeded', 'invalid_api_key']);
+    expect($generation->had_ambiguous_attempt)->toBeTrue();
+})->with(['invalid_api_key', 'idempotency_key_reused']);
+
+// A definite answer to a later attempt with the same Idempotency-Key resolves the ambiguity
+// (spec glossary): limits are applied after Pixelforge's idempotent replay, and content and
+// validation checks give the same answer for the same parameters.
+
+it('resolves an ambiguous attempt with a later definite rejection and fails it for free', function (string $code) {
+    Event::fake([GenerationAccepted::class, GenerationFinished::class]);
+    $generation = ($this->submitting)();
+    $this->pixelforge->createReturns(FakePixelforge::TIMEOUT, $code);
+
+    ($this->run)($generation, 1)->assertReleased(5);
+    expect($generation->fresh()->had_ambiguous_attempt)->toBeTrue();
+
+    ($this->run)($generation, 2)->assertNotReleased();
+
+    $generation->refresh();
+    expect($generation->status)->toBe(GenerationStatus::Failed)
+        ->and($generation->error_code)->toBe($code)
+        ->and($generation->had_ambiguous_attempt)->toBeFalse()
+        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release'])
+        ->and($this->ledger->balance($generation->user))->toBe(1_000_000_000);
+    Event::assertDispatched(GenerationFinished::class, fn (GenerationFinished $event) => $event->generation->is($generation));
+})->with(['content_policy_violation', 'daily_limit_exceeded', 'validation_failed']);
+
+it('resolves an ambiguous attempt with a concurrency limit, so it can expire later', function () {
+    config(['pixelcat.max_wait_minutes' => 15]);
+    $generation = ($this->submitting)();
+    $this->pixelforge->createReturns(FakePixelforge::TIMEOUT, 'concurrency_limit_exceeded');
+
+    ($this->run)($generation, 1);
+    ($this->run)($generation, 2)->assertNotReleased();
+
+    expect($generation->fresh())
+        ->status->toBe(GenerationStatus::Waiting)
+        ->had_ambiguous_attempt->toBeFalse();
+
+    $this->travel(15)->minutes();
+
+    expect(app(DispatchWaitingGenerations::class)->failIfWaitedTooLong($generation))->toBeTrue()
+        ->and($generation->fresh()->error_code)->toBe('waited_too_long')
+        ->and(($this->ledgerTypes)($generation))->toBe(['hold', 'hold_release']);
+});
+
+it('keeps an ambiguous attempt unresolved on a rate limit and retries', function () {
+    $generation = ($this->submitting)();
+    $this->pixelforge->createReturns(FakePixelforge::TIMEOUT, 'rate_limit_exceeded');
+
+    ($this->run)($generation, 1);
+    ($this->run)($generation, 2)->assertReleased(20 + 10);
+
+    expect($generation->fresh())
+        ->status->toBe(GenerationStatus::Submitting)
+        ->had_ambiguous_attempt->toBeTrue();
+});
 
 it('keeps retrying limits and overloads after an ambiguous attempt instead of giving up', function () {
     $generation = ($this->submitting)(['had_ambiguous_attempt' => true]);
@@ -232,17 +289,6 @@ it('keeps retrying limits and overloads after an ambiguous attempt instead of gi
     ($this->run)($generation, 7)->assertReleased(2 + 320);
 
     expect($generation->fresh()->status)->toBe(GenerationStatus::Submitting);
-});
-
-it('moves an ambiguous generation back to waiting on a concurrency limit', function () {
-    $generation = ($this->submitting)(['had_ambiguous_attempt' => true]);
-    $this->pixelforge->createReturns('concurrency_limit_exceeded');
-
-    ($this->run)($generation);
-
-    expect($generation->fresh())
-        ->status->toBe(GenerationStatus::Waiting)
-        ->had_ambiguous_attempt->toBeTrue();
 });
 
 it('gets the same Pixelforge generation back after a timeout that created it', function () {
@@ -299,4 +345,20 @@ it('queues at most one submit job per generation', function () {
 
     Queue::assertPushed(SubmitGenerationToPixelforge::class, 2);
     expect((new SubmitGenerationToPixelforge($generation))->uniqueId())->toBe($generation->id);
+});
+
+it('stays unique for a day of retries, then lets the sweep queue it again', function () {
+    $generation = ($this->submitting)();
+
+    SubmitGenerationToPixelforge::dispatch($generation);
+    $this->travel(23)->hours();
+    SubmitGenerationToPixelforge::dispatch($generation);
+
+    Queue::assertPushed(SubmitGenerationToPixelforge::class, 1);
+
+    // Only a job that vanished without finishing or failing (both release the lock) gets here.
+    $this->travel(1)->hours();
+    SubmitGenerationToPixelforge::dispatch($generation);
+
+    Queue::assertPushed(SubmitGenerationToPixelforge::class, 2);
 });
