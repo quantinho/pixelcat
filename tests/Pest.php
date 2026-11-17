@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /*
@@ -14,9 +15,17 @@ use Tests\TestCase;
 |
 */
 
+// No test may reach the real Pixelforge API (constitution IV): any HTTP request that no
+// fake handles throws. Use Tests\Support\FakePixelforge::fake() to answer Pixelforge calls.
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Feature');
+
+// Unit tests boot the app too (config, container) but never touch the database.
+pest()->extend(TestCase::class)
+    ->beforeEach(fn () => Http::preventStrayRequests())
+    ->in('Unit');
 
 /*
 |--------------------------------------------------------------------------
