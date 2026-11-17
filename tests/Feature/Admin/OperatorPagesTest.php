@@ -72,7 +72,8 @@ describe('access', function () {
     })->with(['/admin/report', '/admin/deliveries']);
 
     it('forbids users who are not admins', function (string $url) {
-        $this->actingAs(User::factory()->create())->get($url)->assertForbidden();
+        // fresh(): a user read back from the database, as on a real request.
+        $this->actingAs(User::factory()->create()->fresh())->get($url)->assertForbidden();
     })->with(['/admin/report', '/admin/deliveries']);
 
     it('lets admins in', function (string $url, string $component) {
