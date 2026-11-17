@@ -9,12 +9,15 @@ PHP 8.3+, Composer, Node 22+, Postgres 16+ (two databases: `pixelforge`, `pixelf
 ```bash
 composer install && npm install
 cp .env.example .env && php artisan key:generate
-# .env: DB_* for the local database, PIXELFORGE_FAKE=true, DEMO_USER_PASSWORD, ADMIN_PASSWORD
+# .env: DB_* for the local database, DEMO_USER_PASSWORD, ADMIN_PASSWORD,
+#       PIXELFORGE_FAKE=true, PIXELFORGE_BASE_URL=http://127.0.0.1:8001/_fake/pixelforge/v1
 php artisan migrate --seed
-composer run dev   # web server, queue worker, scheduler, Vite
+composer run dev                 # web server, queue worker, scheduler, Vite
+php artisan serve --port=8001    # the fake Pixelforge, in a second terminal
 ```
 
 With `PIXELFORGE_FAKE=true` the app talks to the built-in fake Pixelforge and needs no account.
+The fake runs on a second server because `php artisan serve` handles one request at a time.
 
 ## Automated checks
 
@@ -51,7 +54,7 @@ npm run build
 
 ## Production
 
-Laravel Cloud: App cluster (Flex, scheduler on, scale to zero off), managed queue (Flex),
+Laravel Cloud: App cluster (Flex 512 MB, scheduler on, scale to zero on), managed queue,
 Serverless Postgres, Object Storage bucket attached as the `images` disk. Push-to-deploy off;
 CI calls the deploy hook. Deploy command: `php artisan migrate --force`. Separate "production"
 Pixelforge key with webhook URL `https://<app>.laravel.cloud/webhooks/pixelforge`.

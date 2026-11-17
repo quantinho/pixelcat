@@ -36,6 +36,7 @@ function localTime(iso: string | null): string {
 
     <div class="flex flex-1 flex-col gap-8 p-4 md:p-6">
         <Heading
+            level="h1"
             title="Credits"
             description="Each image is paid from your balance. While an image is generating, the top of its estimate is held and released when it finishes; you pay only its actual price."
         />

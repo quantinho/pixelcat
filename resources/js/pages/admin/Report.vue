@@ -59,6 +59,7 @@ function utc(iso: string): string {
     <div class="flex flex-1 flex-col gap-8 p-4 md:p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <Heading
+                level="h1"
                 title="Operator report"
                 description="Credit spend, provider cost and profit per UTC day, reconciled with Pixelforge usage. The last 30 days."
             />
