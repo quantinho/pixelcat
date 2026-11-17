@@ -1,0 +1,21 @@
+# Private: never in the public repo
+.env
+.env.*
+!.env.example
+/notes/
+*.private.md
+*.http
+*.postman_collection.json
+
+# Local Claude Code state
+.claude/settings.local.json
+.claude/worktrees/
+
+# Spec Kit tooling (only the constitution and specs/ are public)
+.specify/*
+!.specify/memory/
+.specify/memory/*
+!.specify/memory/constitution.md
+.claude/skills/speckit-*/
+
+# Laravel's own entries are merged in below when the app is scaffolded

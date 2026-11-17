@@ -1,0 +1,21 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pixelforge-webhook-secret"
+description = "Pixelforge webhook signing secret"
+regex = '''whsec_[A-Za-z0-9]{16,}'''
+keywords = ["whsec_"]
+
+[[rules]]
+id = "pixelforge-api-key-env"
+description = "Pixelforge API key assigned in an env file or config"
+regex = '''PIXELFORGE_API_KEY\s*=\s*["']?([A-Za-z0-9_\-]{16,})'''
+secretGroup = 1
+keywords = ["pixelforge_api_key"]
+
+[[rules]]
+id = "laravel-cloud-deploy-hook"
+description = "Laravel Cloud deploy hook URL"
+regex = '''https://cloud\.laravel\.com/[^\s"']*deploy[^\s"']*'''
+keywords = ["cloud.laravel.com"]
