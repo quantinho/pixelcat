@@ -20,21 +20,37 @@ const props = defineProps<{
     has_unfinished: boolean;
 }>();
 
-// The list on screen: the first page, refreshed by polling, plus older pages loaded with
-// "Load more". Polling only refreshes the newest page; older pages are almost always final.
+// The list on screen: the newest page, refreshed by polling, plus older pages loaded with
+// "Load more". Unfinished generations on those older pages are refreshed by id.
 const items = ref<Generation[]>([...props.generations.data]);
 const nextCursor = ref<string | null>(props.generations.next_cursor);
 const loadingMore = ref(false);
+let newestIds = new Set(props.generations.data.map((item) => item.id));
+
+// Same cap as GenerationHistoryController::MAX_REFRESH_IDS.
+const MAX_REFRESH_IDS = 100;
+
+function replaceKnown(fresh: Generation[]): void {
+    const byId = new Map(fresh.map((item) => [item.id, item]));
+
+    items.value = items.value.map((item) => byId.get(item.id) ?? item);
+}
 
 function mergeNewest(page: CursorPage<Generation>): void {
-    const fresh = new Map(page.data.map((item) => [item.id, item]));
     const known = new Set(items.value.map((item) => item.id));
     const added = page.data.filter((item) => !known.has(item.id));
 
-    items.value = [
-        ...added,
-        ...items.value.map((item) => fresh.get(item.id) ?? item),
-    ];
+    replaceKnown(page.data);
+    items.value = [...added, ...items.value];
+    newestIds = new Set(page.data.map((item) => item.id));
+}
+
+/** Unfinished generations on screen that the newest page doesn't cover. */
+function olderUnfinishedIds(): string[] {
+    return items.value
+        .filter((item) => !item.is_final && !newestIds.has(item.id))
+        .map((item) => item.id)
+        .slice(0, MAX_REFRESH_IDS);
 }
 
 function appendOlder(page: CursorPage<Generation>): void {
@@ -56,10 +72,26 @@ const POLLED_PROPS = [
 
 const poll = usePoll(
     3000,
-    {
-        only: POLLED_PROPS,
-        onSuccess: (page) =>
-            mergeNewest(page.props.generations as CursorPage<Generation>),
+    () => {
+        const ids = olderUnfinishedIds();
+
+        return {
+            only:
+                ids.length > 0
+                    ? [...POLLED_PROPS, 'refreshed_generations']
+                    : POLLED_PROPS,
+            data: ids.length > 0 ? { ids } : {},
+            preserveUrl: true,
+            onSuccess: (page) => {
+                mergeNewest(page.props.generations as CursorPage<Generation>);
+
+                if (ids.length > 0) {
+                    replaceKnown(
+                        page.props.refreshed_generations as Generation[],
+                    );
+                }
+            },
+        };
     },
     { autoStart: false },
 );

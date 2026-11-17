@@ -163,3 +163,54 @@ it('reloads only the polled props', function () {
                 ->has('pixelforge_busy')
                 ->missing('auth')));
 });
+
+describe('refreshing unfinished generations beyond the first page', function () {
+    it('leaves refreshed_generations out of a normal visit', function () {
+        Generation::factory()->for($this->user)->queued()->create();
+
+        $this->actingAs($this->user)
+            ->get('/generations')
+            ->assertInertia(fn (Assert $page) => $page->missing('refreshed_generations'));
+    });
+
+    it('returns the requested generations of the user when the poll asks for them', function () {
+        $old = Generation::factory()->for($this->user)->processing()->create(['created_at' => now()->subDay()]);
+        Generation::factory()->for($this->user)->count(20)->succeeded()->create();
+        $theirs = Generation::factory()->for(User::factory())->processing()->create();
+
+        $query = http_build_query(['ids' => [$old->id, $theirs->id, 'not-a-uuid']]);
+
+        $this->actingAs($this->user)
+            ->get('/generations?'.$query)
+            ->assertInertia(fn (Assert $page) => $page
+                ->reloadOnly(['generations', 'refreshed_generations'], fn (Assert $reload) => $reload
+                    ->has('generations.data', 20)
+                    ->where('generations.data', fn ($data) => collect($data)->doesntContain('id', $old->id))
+                    ->has('refreshed_generations', 1)
+                    ->where('refreshed_generations.0.id', $old->id)
+                    ->where('refreshed_generations.0.status', 'processing')));
+    });
+
+    it('returns nothing when no ids are sent', function () {
+        $this->actingAs($this->user)
+            ->get('/generations')
+            ->assertInertia(fn (Assert $page) => $page
+                ->reloadOnly('refreshed_generations', fn (Assert $reload) => $reload
+                    ->has('refreshed_generations', 0)));
+    });
+});
+
+it('sends at most the latest 20 timeline events per generation, oldest first', function () {
+    $generation = Generation::factory()->for($this->user)->processing()->create();
+
+    foreach (range(1, 25) as $i) {
+        $generation->recordEvent('note', "Event {$i}");
+    }
+
+    $this->actingAs($this->user)
+        ->get('/generations')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('generations.data.0.events', 20)
+            ->where('generations.data.0.events.0.message', 'Event 6')
+            ->where('generations.data.0.events.19.message', 'Event 25'));
+});
