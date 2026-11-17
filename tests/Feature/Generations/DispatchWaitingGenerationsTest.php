@@ -12,6 +12,8 @@ use App\Models\Generation;
 use App\Models\LedgerEntry;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Queue;
 
 /**
@@ -38,6 +40,13 @@ beforeEach(function () {
         app(Ledger::class)->hold($generation, $generation->estimate_max);
 
         return $generation;
+    };
+
+    // As a worker does for a ShouldBeUniqueUntilProcessing job: release the lock, then run it.
+    $this->expire = function (Generation $generation): void {
+        $job = new ExpireWaitingGeneration($generation);
+        (new UniqueLock(app(Repository::class)))->release($job);
+        app()->call([$job, 'handle']);
     };
 
     $this->statusOf = fn (Generation $generation) => $generation->fresh()->status;
@@ -161,8 +170,7 @@ it('runs from the hourly sweep command', function () {
     $fresh = ($this->waiting)(User::factory()->create(), 1);
 
     $this->artisan('pixelforge:dispatch')
-        ->expectsOutputToContain('Dispatched 1 generation')
-        ->expectsOutputToContain('1 waited too long')
+        ->expectsOutputToContain('Dispatched 1 generation(s); 1 waited too long and failed.')
         ->assertSuccessful();
 
     expect(($this->statusOf)($old))->toBe(GenerationStatus::Failed)
@@ -190,7 +198,7 @@ it('runs the dispatcher from the DispatchWaiting job', function () {
 it('expires a generation that is still waiting at the limit', function () {
     $generation = ($this->waiting)(User::factory()->create(), 15);
 
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     expect($generation->fresh())
         ->status->toBe(GenerationStatus::Failed)
@@ -204,7 +212,7 @@ it('does not expire a generation that left the waiting state', function (string 
     $generation = Generation::factory()->{$state}()->create(['created_at' => now()->subMinutes(20)]);
     $before = $generation->fresh()->status;
 
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     expect(($this->statusOf)($generation))->toBe($before)
         ->and($generation->fresh()->error_code)->toBe($state === 'failed' ? 'generation_failed' : null);
@@ -213,7 +221,7 @@ it('does not expire a generation that left the waiting state', function (string 
 it('does not expire a waiting generation that had an ambiguous attempt', function () {
     $generation = ($this->waiting)(User::factory()->create(), 20, ['had_ambiguous_attempt' => true]);
 
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     expect(($this->statusOf)($generation))->toBe(GenerationStatus::Waiting);
 });
@@ -222,18 +230,18 @@ it('re-dispatches itself with the remaining delay when it runs early', function 
     config(['pixelcat.max_wait_minutes' => 40]);
     $generation = ($this->waiting)(User::factory()->create(), 15);
 
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     expect(($this->statusOf)($generation))->toBe(GenerationStatus::Waiting);
     Queue::assertPushed(ExpireWaitingGeneration::class, fn (ExpireWaitingGeneration $job) => $job->delay === 15 * 60);
 
     $this->travel(20)->minutes();
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     Queue::assertPushed(ExpireWaitingGeneration::class, fn (ExpireWaitingGeneration $job) => $job->delay === 5 * 60);
 
     $this->travel(5)->minutes();
-    app()->call([new ExpireWaitingGeneration($generation), 'handle']);
+    ($this->expire)($generation);
 
     expect(($this->statusOf)($generation))->toBe(GenerationStatus::Failed);
 });

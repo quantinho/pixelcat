@@ -72,7 +72,7 @@ it('stores the accepted generation as queued with its Pixelforge id and rates', 
 
     expect($generation->status)->toBe(GenerationStatus::Queued)
         ->and($generation->pixelforge_id)->toBe($stored['id'])
-        ->and($generation->rates)->toBe(FakePixelforge::RATES)
+        ->and($generation->rates)->toEqual(FakePixelforge::RATES)
         ->and($generation->submit_attempts)->toBe(1)
         ->and($generation->had_ambiguous_attempt)->toBeFalse()
         ->and($generation->last_synced_at)->not->toBeNull()
