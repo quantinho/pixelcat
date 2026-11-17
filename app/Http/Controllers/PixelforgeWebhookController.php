@@ -12,6 +12,7 @@ use App\Pixelforge\WebhookSignature;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -36,11 +37,20 @@ class PixelforgeWebhookController extends Controller
         'pixelforge-signature',
     ];
 
+    /** Rejected posts kept per hour: enough to spot a wrong secret, too few to fill the table. */
+    private const MAX_REJECTED_STORED_PER_HOUR = 100;
+
     public function __invoke(Request $request, WebhookSignature $signature, ApplyGenerationSnapshot $apply): Response
     {
         $body = $request->getContent();
         $signatureValid = $signature->verify((string) $request->header('Pixelforge-Signature', ''), $body, now()->getTimestamp());
         $event = $signatureValid ? json_decode($body, true) : null;
+
+        if (! $signatureValid && $this->rejectedStoredInLastHour() >= self::MAX_REJECTED_STORED_PER_HOUR) {
+            Log::warning('Rejected an unsigned webhook without storing it: too many in the last hour.', ['ip' => $request->ip()]);
+
+            return response()->noContent(400);
+        }
 
         $delivery = WebhookDelivery::query()->create([
             'event_id' => is_array($event) ? ($event['id'] ?? null) : $this->headerValue($request, 'Pixelforge-Event-Id'),
@@ -69,6 +79,14 @@ class PixelforgeWebhookController extends Controller
         $delivery->update(['outcome' => $outcome, 'generation_id' => $generation?->id]);
 
         return response()->noContent();
+    }
+
+    private function rejectedStoredInLastHour(): int
+    {
+        return WebhookDelivery::query()
+            ->where('signature_valid', false)
+            ->where('received_at', '>=', now()->subHour())
+            ->count();
     }
 
     /**
@@ -142,8 +160,18 @@ class PixelforgeWebhookController extends Controller
         if ($snapshot->localId !== null && Str::isUuid($snapshot->localId)) {
             $generation = Generation::query()->whereKey($snapshot->localId)->lockForUpdate()->first();
 
-            if ($generation !== null) {
+            // metadata.local_id is only trusted when it agrees with the Pixelforge id we already
+            // have, so one generation's usage can never be charged to another.
+            if ($generation !== null && ($generation->pixelforge_id === null || $generation->pixelforge_id === $snapshot->id)) {
                 return $generation;
+            }
+
+            if ($generation !== null) {
+                Log::critical('A webhook names a local generation that has a different Pixelforge id.', [
+                    'generation_id' => $generation->id,
+                    'our_pixelforge_id' => $generation->pixelforge_id,
+                    'webhook_pixelforge_id' => $snapshot->id,
+                ]);
             }
         }
 

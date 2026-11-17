@@ -7,7 +7,9 @@ use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
 class CreateNewUser implements CreatesNewUsers
@@ -28,8 +30,16 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
+        // Each account gets free credit, so scripted sign-ups could use up the shared account.
+        $throttleKey = 'signup:'.request()->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, (int) config('pixelcat.signups_per_ip_per_hour'))) {
+            throw ValidationException::withMessages([
+                'email' => 'Too many accounts were created from your network. Try again in an hour.',
+            ]);
+        }
+
         // A user never exists without their welcome credit.
-        return DB::transaction(function () use ($input) {
+        $user = DB::transaction(function () use ($input) {
             $user = User::create([
                 'name' => $input['name'],
                 'email' => $input['email'],
@@ -40,5 +50,9 @@ class CreateNewUser implements CreatesNewUsers
 
             return $user;
         });
+
+        RateLimiter::hit($throttleKey, 3600);
+
+        return $user;
     }
 }
