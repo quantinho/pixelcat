@@ -154,6 +154,21 @@ final class ApplyGenerationSnapshot {
 After commit it dispatches `App\Events\GenerationSucceeded` (success) and
 `App\Events\GenerationFinished` (any final state), each carrying the `Generation`.
 
+## Behaviour details settled during implementation
+
+- Invalid money input (`Money::fromDecimal`, `Money::perTokenNanos`, a provider cost that is
+  not a whole nanodollar) throws `InvalidArgumentException`.
+- `CalculateCost::providerCost` checks wholeness on the **total** (`Σ n × rate × 1000`), as the
+  spec says; `Money::perTokenNanos` is a stricter per-token helper and is not used for costs.
+- `Money::display` has no thousands separator and rounds half-up on the absolute value
+  (`-$0.0100`).
+- `estimate_position` is clamped to 0…1 and is 0.5 when min equals max.
+- `PriceEstimate` lives in `App\Actions\Pricing`.
+- Pixelforge's per-generation `rates` on the latest snapshot win over rates stored earlier
+  (they are fixed at creation, so they only ever match).
+- The database session runs in UTC (`config/database.php`), so `timestamptz` values and
+  billing days don't shift with the server's time zone.
+
 ## Factories
 
 `GenerationFactory` states: `waiting()`, `submitting()`, `queued()`, `processing()`,

@@ -144,14 +144,21 @@ class GenerationFactory extends Factory
                 $cost = app(CalculateCost::class);
                 $providerCost = $cost->providerCost($usage, self::DOCUMENTED_PRICING['rates']);
 
-                $generation->fill($usage + [
+                $defaults = $usage + [
                     'provider_cost' => $providerCost,
                     'charged' => $cost->userPrice($providerCost),
                     'completed_at' => now(),
                     'image_url' => "https://pixelforge.test/images/{$generation->pixelforge_id}.png",
                     'image_url_expires_at' => now()->addDay(),
                     'last_synced_at' => now(),
-                ]);
+                ];
+
+                // Only fill what the caller didn't set explicitly.
+                foreach ($defaults as $attribute => $value) {
+                    if ($generation->getAttribute($attribute) === null) {
+                        $generation->setAttribute($attribute, $value);
+                    }
+                }
             });
     }
 

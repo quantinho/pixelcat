@@ -55,7 +55,7 @@ function ledgerOf(Generation $generation): array
 
 function isoUtc(mixed $time): ?string
 {
-    return $time?->copy()->isoUtc()->format('Y-m-d\TH:i:s\Z');
+    return $time?->copy()->utc()->format('Y-m-d\TH:i:s\Z');
 }
 
 describe('forward moves', function () {

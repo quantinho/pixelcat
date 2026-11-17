@@ -141,7 +141,8 @@ final class ApplyGenerationSnapshot
 
     private function recordCost(Generation $generation, GenerationSnapshot $snapshot): void
     {
-        $rates = $generation->rates ?? $snapshot->rates;
+        // Pixelforge's per-generation rates are the source of truth (fixed at creation).
+        $rates = $snapshot->rates ?? $generation->rates;
 
         if ($snapshot->usage === null || $rates === null) {
             throw new RuntimeException("Pixelforge snapshot for [{$snapshot->id}] has no usage or rates.");
@@ -160,7 +161,7 @@ final class ApplyGenerationSnapshot
     private function fillMissingData(Generation $generation, GenerationSnapshot $snapshot): void
     {
         $generation->pixelforge_id ??= $snapshot->id;
-        $generation->rates ??= $snapshot->rates;
+        $generation->rates = $snapshot->rates ?? $generation->rates;
         $generation->provider_created_at ??= $snapshot->createdAt;
         $generation->started_at ??= $snapshot->startedAt;
 
