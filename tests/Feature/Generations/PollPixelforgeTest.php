@@ -148,10 +148,13 @@ describe('SyncGeneration', function () {
 
     it('skips Pixelforge when fewer than 20 requests are left this minute, and tries later', function () {
         $generation = generationAtPixelforge($this->pixelforge, $this->user, 'queued', 'succeeded');
+        $job = new SyncGeneration($generation->id, 0, now());
+        $this->travelTo($job->dueAt());
+        // Another request just told us how much of this minute's budget is left.
         $this->pixelforge->withRateLimitRemaining(19);
         app(PixelforgeClient::class)->getGeneration((string) $generation->pixelforge_id);
 
-        runSync(new SyncGeneration($generation->id, 0, now()));
+        app()->call([$job, 'handle']);
 
         Http::assertSentCount(1);
         expect($generation->fresh()->status)->toBe(GenerationStatus::Queued);
