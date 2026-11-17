@@ -3,12 +3,13 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import MoneyText from '@/components/pixelcat/MoneyText.vue';
 import { Spinner } from '@/components/ui/spinner';
+import type { EstimateProblem } from '@/composables/useEstimate';
 import type { Estimate } from '@/types';
 
 const props = defineProps<{
     estimate: Estimate | null;
     pending: boolean;
-    failed: boolean;
+    problem: EstimateProblem | null;
 }>();
 
 const TOKEN_LABELS: Record<string, string> = {
@@ -65,7 +66,20 @@ const ratesAge = computed(() => {
                 </p>
             </template>
             <p
-                v-else-if="failed"
+                v-else-if="problem?.kind === 'unavailable'"
+                class="mt-2 text-sm text-red-600 dark:text-red-500"
+            >
+                Pixelforge is unreachable right now, so there's no price and
+                nothing can be started. Try again in a minute.
+            </p>
+            <p
+                v-else-if="problem?.kind === 'throttled'"
+                class="mt-2 text-sm text-muted-foreground"
+            >
+                Slow down a little. The price updates again in a few seconds.
+            </p>
+            <p
+                v-else-if="problem"
                 class="mt-2 text-sm text-red-600 dark:text-red-500"
             >
                 We couldn't load the price right now. It will update when you

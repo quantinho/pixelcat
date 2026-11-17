@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useEstimate } from '@/composables/useEstimate';
-import type { Estimate, Money, Quality, Size } from '@/types';
+import type { Quality, Size } from '@/types';
 
 defineOptions({
     layout: {
@@ -94,9 +94,8 @@ const {
     estimate,
     pending,
     errors: estimateErrors,
-    failed: estimateFailed,
+    problem: estimateProblem,
     refresh,
-    replace,
 } = useEstimate(() => ({
     prompt: form.prompt,
     size: form.size,
@@ -182,16 +181,40 @@ const dailyCapReached = computed(() => props.daily.used >= props.daily.cap);
 const cantAfford = computed(() => estimate.value?.affordable === false);
 
 // Submitting
-type Problem =
-    | { kind: 'prices_changed' }
-    | { kind: 'id_reused' }
-    | {
-          kind: 'insufficient_balance';
-          missing: Money | null;
-          message: string | null;
-      }
-    | { kind: 'daily_cap'; resetsAt: string | null; message: string | null }
-    | { kind: 'other'; message: string };
+// Refusals come back as Inertia validation errors under these keys (contracts/http.md).
+type RefusalKind =
+    | 'prices_changed'
+    | 'id_reused'
+    | 'insufficient_balance'
+    | 'daily_cap'
+    | 'pixelforge_unavailable';
+
+type Problem = { kind: RefusalKind | 'other'; message: string };
+
+const REFUSALS: RefusalKind[] = [
+    'prices_changed',
+    'id_reused',
+    'insufficient_balance',
+    'daily_cap',
+    'pixelforge_unavailable',
+];
+
+const PROBLEM_TITLES: Record<Problem['kind'], string> = {
+    prices_changed: "Pixelforge's prices changed",
+    id_reused: 'This form was already used',
+    insufficient_balance: 'Not enough credits',
+    daily_cap: 'Daily limit reached',
+    pixelforge_unavailable: 'Pixelforge is unreachable',
+    other: "Couldn't start the image",
+};
+
+/** Errors shown next to their inputs; every other key is shown as a general problem. */
+function isFieldKey(key: string): boolean {
+    return (
+        ['prompt', 'size', 'quality', 'reference_images'].includes(key) ||
+        key.startsWith('reference_images.')
+    );
+}
 
 const problem = ref<Problem | null>(null);
 const submitWhenReady = ref(false);
@@ -208,138 +231,44 @@ function renewId(): void {
     form.id = crypto.randomUUID();
 }
 
-function isMoney(value: unknown): value is Money {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'display' in value &&
-        'exact' in value
-    );
-}
+function handleErrors(errors: Record<string, string>): void {
+    const refusal = REFUSALS.find((kind) => kind in errors);
 
-function isEstimate(value: unknown): value is Estimate {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'pricing_version' in value &&
-        isMoney((value as { max?: unknown }).max)
-    );
-}
-
-function stringOrNull(value: unknown): string | null {
-    return typeof value === 'string' && value !== '' ? value : null;
-}
-
-/**
- * contracts/http.md: 409 id_reused / prices_changed, 422 insufficient_balance, 429 daily_cap,
- * each a JSON body with an `error` code.
- */
-function handleHttpException(response: HttpExceptionResponse): boolean | void {
-    const body: Record<string, unknown> =
-        typeof response.data === 'object' && response.data !== null
-            ? response.data
-            : {};
-    const code = stringOrNull(body.error) ?? stringOrNull(body.code);
-    const message = stringOrNull(body.message);
-
-    switch (code) {
-        case 'prices_changed': {
-            const next = body.estimate ?? body;
-
-            if (isEstimate(next) && Array.isArray(next.breakdown)) {
-                replace(next);
-            } else {
-                refresh();
-            }
-
-            problem.value = { kind: 'prices_changed' };
-
-            return false;
-        }
-
-        case 'id_reused':
+    if (refusal) {
+        if (refusal === 'prices_changed') {
+            // Show the new price; the user confirms by pressing Generate again.
+            refresh();
+        } else if (refusal === 'id_reused') {
             renewId();
-            problem.value = { kind: 'id_reused' };
-
-            return false;
-
-        case 'insufficient_balance': {
-            const missing = body.missing ?? body.amount_missing;
-            problem.value = {
-                kind: 'insufficient_balance',
-                missing: isMoney(missing) ? missing : null,
-                message,
-            };
-
-            return false;
         }
 
-        case 'daily_cap':
-            problem.value = {
-                kind: 'daily_cap',
-                resetsAt: stringOrNull(body.resets_at),
-                message,
-            };
+        problem.value = { kind: refusal, message: errors[refusal] };
 
-            return false;
+        return;
     }
+
+    const other = Object.keys(errors).find((key) => !isFieldKey(key));
+
+    if (other) {
+        problem.value = { kind: 'other', message: errors[other] };
+    }
+}
+
+/** Responses that aren't Inertia pages: an expired session, throttling, server errors. */
+function handleHttpException(response: HttpExceptionResponse): boolean {
+    let message =
+        "Something went wrong and nothing was started. You weren't charged. Try again in a moment.";
 
     if (response.status === 419) {
-        problem.value = {
-            kind: 'other',
-            message: 'Your session expired. Reload the page and try again.',
-        };
-
-        return false;
+        message = 'Your session expired. Reload the page and try again.';
+    } else if (response.status === 429) {
+        message =
+            "You're sending requests too quickly. Wait a moment and try again.";
     }
 
-    if (response.status === 422 && typeof body.errors === 'object') {
-        // A plain validation response sent as JSON: show it on the fields.
-        const errors = body.errors as Record<string, string[] | string>;
-        form.setError(
-            Object.fromEntries(
-                Object.entries(errors).map(([field, messages]) => [
-                    field,
-                    Array.isArray(messages) ? messages[0] : messages,
-                ]),
-            ),
-        );
-
-        return false;
-    }
-
-    problem.value = {
-        kind: 'other',
-        message:
-            "Something went wrong and nothing was started. You weren't charged. Try again in a moment.",
-    };
+    problem.value = { kind: 'other', message };
 
     return false;
-}
-
-/** The same cases, if the server sends them as Inertia validation errors instead. */
-function handleErrors(errors: Record<string, string>): void {
-    const message = (key: string) => errors[key] ?? null;
-
-    if ('prices_changed' in errors || errors.pricing_version) {
-        refresh();
-        problem.value = { kind: 'prices_changed' };
-    } else if ('id_reused' in errors || errors.id) {
-        renewId();
-        problem.value = { kind: 'id_reused' };
-    } else if ('insufficient_balance' in errors || errors.balance) {
-        problem.value = {
-            kind: 'insufficient_balance',
-            missing: null,
-            message: message('insufficient_balance') ?? message('balance'),
-        };
-    } else if ('daily_cap' in errors) {
-        problem.value = {
-            kind: 'daily_cap',
-            resetsAt: null,
-            message: message('daily_cap'),
-        };
-    }
 }
 
 function submit(): void {
@@ -623,7 +552,7 @@ const isMac =
                 </fieldset>
 
                 <!-- What went wrong with the last submit -->
-                <div aria-live="assertive">
+                <div role="alert">
                     <Alert
                         v-if="problem"
                         :variant="
@@ -633,64 +562,28 @@ const isMac =
                         "
                     >
                         <CircleAlert />
-                        <template v-if="problem.kind === 'prices_changed'">
-                            <AlertTitle>Pixelforge's prices changed</AlertTitle>
-                            <AlertDescription>
+                        <AlertTitle>{{
+                            PROBLEM_TITLES[problem.kind]
+                        }}</AlertTitle>
+                        <AlertDescription>
+                            <p>{{ problem.message }}</p>
+                            <p v-if="problem.kind === 'prices_changed'">
                                 Check the updated estimate, then press Generate
-                                to confirm. Nothing was started.
-                            </AlertDescription>
-                        </template>
-                        <template v-else-if="problem.kind === 'id_reused'">
-                            <AlertTitle>This form was already used</AlertTitle>
-                            <AlertDescription>
-                                It was sent before with different settings, so
-                                it's now ready as a new request. Press Generate
-                                to send it.
-                            </AlertDescription>
-                        </template>
-                        <template
-                            v-else-if="problem.kind === 'insufficient_balance'"
-                        >
-                            <AlertTitle>Not enough credits</AlertTitle>
-                            <AlertDescription>
-                                <p v-if="problem.missing">
-                                    You need {{ problem.missing.display }} more
-                                    to start this image.
-                                </p>
-                                <p v-else>
-                                    {{
-                                        problem.message ??
-                                        "Your balance doesn't cover the top of the estimate."
-                                    }}
-                                </p>
-                                <Link
-                                    href="/credits"
-                                    class="font-medium underline underline-offset-4"
-                                    >Buy credits</Link
-                                >
-                            </AlertDescription>
-                        </template>
-                        <template v-else-if="problem.kind === 'daily_cap'">
-                            <AlertTitle>Daily limit reached</AlertTitle>
-                            <AlertDescription>
-                                <template v-if="problem.resetsAt">
-                                    You can start {{ daily.cap }} images a day.
-                                    It resets {{ localTime(problem.resetsAt) }}.
-                                </template>
-                                <template v-else>
-                                    {{
-                                        problem.message ??
-                                        `You can start ${daily.cap} images a day. It resets at midnight UTC.`
-                                    }}
-                                </template>
-                            </AlertDescription>
-                        </template>
-                        <template v-else>
-                            <AlertTitle>Couldn't start the image</AlertTitle>
-                            <AlertDescription>{{
-                                problem.message
-                            }}</AlertDescription>
-                        </template>
+                                to confirm.
+                            </p>
+                            <p v-else-if="problem.kind === 'id_reused'">
+                                The form is ready as a new request. Press
+                                Generate to send it.
+                            </p>
+                            <Link
+                                v-else-if="
+                                    problem.kind === 'insufficient_balance'
+                                "
+                                href="/credits"
+                                class="font-medium underline underline-offset-4"
+                                >Buy credits</Link
+                            >
+                        </AlertDescription>
                     </Alert>
                 </div>
 
@@ -743,7 +636,7 @@ const isMac =
                 <EstimatePanel
                     :estimate="estimate"
                     :pending="pending"
-                    :failed="estimateFailed"
+                    :problem="estimateProblem"
                 />
             </div>
         </div>
