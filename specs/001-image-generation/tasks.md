@@ -26,17 +26,17 @@ the plan's slices, which touch separate files and can be built as separate pull 
 
 **Purpose**: Project scaffold, tooling and delivery pipeline
 
-- [ ] T001 Scaffold the Laravel 13 Vue starter kit (pgsql, Pest, npm) in a temporary folder and move it into the repository root, merging its `.gitignore` into ours and keeping `.gitleaks.toml`, `.specify/` and `specs/` untouched (composer.json, package.json, .gitignore)
-- [ ] T002 Require `brick/math`, `aws/aws-sdk-php`, `league/flysystem-aws-s3-v3`, and dev `larastan/larastan` in composer.json
-- [ ] T003 [P] Configure Larastan (level 8, `app/` and `tests/`) in phpstan.neon and the Pint preset in pint.json
-- [ ] T004 [P] Create config/pixelforge.php and config/pixelcat.php for every key in data-model.md "Configuration (env)", and list them with empty or default values in .env.example
-- [ ] T005 [P] Point tests at the Postgres database `pixelforge_test` in phpunit.xml
-- [ ] T006 [P] Create the CI workflow (Postgres service, Composer and npm install, Pint `--test`, Larastan, Pest, `npm run build`) in .github/workflows/ci.yml
-- [ ] T007 Add the deploy job to .github/workflows/ci.yml: on `main` after checks pass, POST `secrets.LARAVEL_CLOUD_DEPLOY_HOOK` with `?commit_hash=${{ github.sha }}`, then run scripts/smoke.sh against `vars.APP_URL` (site up, login page loads, webhook rejects a bad signature with 400)
-- [ ] T008 [P] Add a pull request template with a constitution checklist in .github/pull_request_template.md
-- [ ] T009 [P] Write the project guide for contributors and coding agents (commands, conventions, money rules, where things live) in CLAUDE.md
-- [ ] T010 Rename the app to Pixelcat, make `/dashboard` redirect to `/generate`, keep `User` without `MustVerifyEmail` and set the mailer to `log` (spec Assumptions), and register the empty slice route files with the middleware listed in contracts/http.md (routes/generations.php, routes/images.php, routes/credits.php, routes/operators.php, routes/webhooks.php, routes/fake-pixelforge.php) in bootstrap/app.php and routes/web.php
-- [ ] T011 Create stub commands `pixelforge:dispatch`, `pixelforge:poll` and `pixelforge:reconcile` (signature and description only; their slices fill `handle()`) in app/Console/Commands/DispatchGenerations.php, PollPixelforge.php and ReconcileUsage.php, and register the schedule (dispatch and poll every minute, reconcile daily 00:15 UTC, all `onOneServer()->withoutOverlapping()`) in routes/console.php
+- [x] T001 Scaffold the Laravel 13 Vue starter kit (pgsql, Pest, npm) in a temporary folder and move it into the repository root, merging its `.gitignore` into ours and keeping `.gitleaks.toml`, `.specify/` and `specs/` untouched (composer.json, package.json, .gitignore)
+- [x] T002 Require `brick/math`, `aws/aws-sdk-php`, `league/flysystem-aws-s3-v3`, and dev `larastan/larastan` in composer.json
+- [x] T003 [P] Configure Larastan (level 8 over app, bootstrap, config, database and routes; Pest tests are excluded because their closures confuse static analysis) in phpstan.neon and the Pint preset in pint.json
+- [x] T004 [P] Create config/pixelforge.php and config/pixelcat.php for every key in data-model.md "Configuration (env)", and list them with empty or default values in .env.example
+- [x] T005 [P] Point tests at the Postgres database `pixelforge_test` in phpunit.xml
+- [x] T006 [P] Create the CI workflow (Postgres service, Composer and npm install, Pint `--test`, Larastan, Pest, `npm run build`) in .github/workflows/ci.yml
+- [x] T007 Add the deploy job to .github/workflows/ci.yml: on `main` after checks pass, POST `secrets.LARAVEL_CLOUD_DEPLOY_HOOK` with `?commit_hash=${{ github.sha }}`, then run scripts/smoke.sh against `vars.APP_URL` (site up, login page loads, webhook rejects a bad signature with 400)
+- [x] T008 [P] Add a pull request template with a constitution checklist in .github/pull_request_template.md
+- [x] T009 [P] Write the project guide for contributors and coding agents (commands, conventions, money rules, where things live) in CLAUDE.md
+- [x] T010 Rename the app to Pixelcat, make `/dashboard` redirect to `/generate`, keep `User` without `MustVerifyEmail` and set the mailer to `log` (spec Assumptions), and register the empty slice route files with the middleware listed in contracts/http.md (routes/generations.php, routes/images.php, routes/credits.php, routes/operators.php, routes/webhooks.php, routes/fake-pixelforge.php) in bootstrap/app.php and routes/web.php
+- [x] T011 Create stub commands `pixelforge:dispatch`, `pixelforge:poll` and `pixelforge:reconcile` (signature and description only; their slices fill `handle()`) in app/Console/Commands/DispatchGenerations.php, PollPixelforge.php and ReconcileUsage.php, and register the schedule (dispatch and poll every minute, reconcile daily 00:15 UTC, all `onOneServer()->withoutOverlapping()`) in routes/console.php
 
 ---
 
