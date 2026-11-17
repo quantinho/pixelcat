@@ -105,6 +105,8 @@ describe('GET /generations/{generation}/image', function () {
     });
 
     it('streams the stored copy from a disk without signed URLs', function () {
+        // A plain local disk, as in development (the fake disk always signs URLs).
+        Storage::set('images', Storage::build(['driver' => 'local', 'root' => Storage::disk('images')->path('')]));
         Storage::disk('images')->put('copy.png', IMAGE_PNG);
         $this->generation->update(['image_path' => 'copy.png', 'image_url_expires_at' => now()->subHour()]);
 
