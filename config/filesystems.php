@@ -47,6 +47,16 @@ return [
             'report' => false,
         ],
 
+        // Stored copies of generated images (spec FR-012). Private: the app authorizes each
+        // request and redirects to a short-lived URL. On Laravel Cloud, attaching a bucket to
+        // the disk named "images" replaces this configuration.
+        'images' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/images'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
