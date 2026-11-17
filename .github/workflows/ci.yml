@@ -86,8 +86,41 @@ jobs:
       - name: Tests (Postgres)
         run: php artisan test
 
+      # Blocking on pull requests; report-only on main, so a fresh advisory or a registry
+      # outage can't block an urgent deploy of code that already passed on its PR.
+      - name: PHP dependency audit
+        continue-on-error: ${{ github.event_name == 'push' }}
+        run: composer audit --locked
+
+      - name: npm dependency audit (production, high and above)
+        continue-on-error: ${{ github.event_name == 'push' }}
+        run: npm audit --omit=dev --audit-level=high
+
+  # Server-side secret scan that doesn't depend on anyone's local hook.
+  security:
+    runs-on: ubuntu-latest
+
+    env:
+      GITLEAKS_VERSION: 8.30.1
+
+    steps:
+      - name: Checkout code (full history for the secret scan)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Secret scan (gitleaks, whole history)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${archive}\$" | sha256sum --check -
+          tar -xzf "${archive}" gitleaks
+          ./gitleaks git --redact --no-banner --config .gitleaks.toml .
+
   deploy:
-    needs: checks
+    needs: [checks, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 

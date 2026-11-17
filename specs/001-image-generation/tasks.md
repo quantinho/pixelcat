@@ -213,7 +213,7 @@ each step.
 - [x] T081 [P] Seeders: admin and demo users with passwords from `ADMIN_PASSWORD` and `DEMO_USER_PASSWORD`; fake generations in every state only outside production (FR-022) in database/seeders/
 - [ ] T082 [P] Implement `pixelcat:demo-generations` (real API, keyword prompts, normal flow) in app/Console/Commands/DemoGenerations.php
 - [ ] T083 [P] Write README.md: what it does, screenshots, mermaid diagrams of the state machine and the money flow, local setup, tests, demo logins "sent with the application"
-- [ ] T084 [P] Write DECISIONS.md: each open question, options and choice (nanodollars, rounding up, in-request webhook apply, fake Pixelforge, polling, slot fairness, ambiguity rule, talking points on Typesense, ClickHouse, ECS and WebSockets)
+- [x] T084 [P] Write DECISIONS.md: each open question, options and choice (nanodollars, rounding up, in-request webhook apply, fake Pixelforge, polling, slot fairness, ambiguity rule, talking points on Typesense, ClickHouse, ECS and WebSockets)
 - [ ] T085 Accessibility and copy pass on all pages (labels, focus states, keyboard use, sentence case, error copy per the spec)
 - [ ] T086 Run every quickstart.md validation scenario locally against the fake, then against the real Pixelforge with a local key through cloudflared
 - [ ] T087 Production: create the production Pixelforge key and webhook URL, set Cloud env vars, run `pixelcat:demo-generations`, and after the UTC day closes confirm `pixelforge:reconcile` shows `match` (SC-004)
