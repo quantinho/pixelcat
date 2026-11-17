@@ -176,13 +176,20 @@ the code must follow are in the [constitution](.specify/memory/constitution.md).
 Weak spots I know about, so they are decisions rather than surprises.
 
 - **An ambiguous create keeps a slot until Pixelforge answers.** After a timeout we resend with
-  the same key and never fail it locally (7), so during a long Pixelforge outage it stays
-  `submitting`, holds its estimate and counts against the 3 shared slots. Next: settle the
-  question with `GET /v1/generations` (match `metadata.local_id`), then cap the resends.
-- **A concurrency 429 is read as "nothing was created".** The docs say "Rejected requests create
-  nothing and cost nothing", and that an idempotent replay "doesn't count against the
-  concurrency or daily limits". They don't spell out the order of those checks for a resend of
-  an earlier attempt; if that ever proved wrong, the same list lookup settles it.
+  the same Idempotency-Key, which settles it the moment Pixelforge responds: the generation it
+  already had comes back as a replay, or it is created now, never twice. We never fail it
+  locally (7), so during a long Pixelforge outage it stays `submitting`, holds its estimate and
+  counts against the 3 shared slots; resends back off to one every 10 minutes. No lookup would
+  help while Pixelforge is down, so the cost is waiting, not money. Next: alert an operator
+  when a generation stays `submitting` for an hour.
+- **A 429 on a resend is read as "nothing was created".** No single sentence says so; it follows
+  from two: "Rejected requests create nothing and cost nothing", and a replay of a key Pixelforge
+  knows "doesn't count against the concurrency or daily limits", so it would have come back as a
+  202 replay. If that reading were ever wrong, the damage is bounded. A concurrency 429 only
+  sends the generation back to waiting, and its next submit reuses the key, so it returns the
+  original, never a second one. A daily-limit 429 fails it; if Pixelforge had created it anyway,
+  its webhook is recorded as an anomaly: we record what Pixelforge billed, the user isn't
+  charged, and reconciliation still matches.
 - **Prices can rise while an image waits for a slot.** The estimate uses rates cached for up to
   5 minutes and a generation can wait 15. The user pays the real price even above the hold
   (the balance may go below zero) and we log a warning. Next: fetch pricing uncached on
